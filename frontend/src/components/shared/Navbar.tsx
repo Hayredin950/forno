@@ -33,14 +33,14 @@ export default function Navbar() {
 
   const handleLogout = () => { authApi.logout(); setUser(null); navigate('/'); };
 
-  if (isAuthPage) return null;
-
-  const navLinks = [
-    { label: 'Home', path: '/' },
-    { label: 'Menu', path: '/dashboard' },
-    { label: 'Build Your Own', path: '/dashboard/builder' },
-    ...(user ? [{ label: 'My Orders', path: '/dashboard/orders' }] : []),
-  ];
+  const navLinks = isAuthPage 
+    ? [{ label: 'Home', path: '/' }]
+    : [
+        { label: 'Home', path: '/' },
+        { label: 'Menu', path: '/dashboard' },
+        { label: 'Build Your Own', path: '/dashboard/builder' },
+        ...(user ? [{ label: 'My Orders', path: '/dashboard/orders' }] : []),
+      ];
 
   return (
     <>
@@ -64,7 +64,7 @@ export default function Navbar() {
             {navLinks.map(link => (
               <Link key={link.path} to={link.path} className="relative text-sm font-medium text-forno-text-secondary hover:text-forno-text-primary transition-colors duration-200 py-1">
                 {link.label}
-                {location.pathname === link.path && (
+                {!isAuthPage && location.pathname === link.path && (
                   <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 accent-gradient rounded-full" />
                 )}
               </Link>
@@ -72,37 +72,41 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link to="/dashboard/checkout" className="relative p-2 text-forno-text-secondary hover:text-forno-text-primary transition-colors">
-              <ShoppingCart size={20} strokeWidth={1.5} />
-              {cartCount > 0 && (
-                <motion.span
-                  key={cartCount}
-                  initial={{ scale: 1.3 }}
-                  animate={{ scale: 1 }}
-                  className="absolute -top-0.5 -right-0.5 w-5 h-5 accent-gradient rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
-                >
-                  {cartCount}
-                </motion.span>
-              )}
-            </Link>
+            {!isAuthPage && (
+              <>
+                <Link to="/dashboard/checkout" className="relative p-2 text-forno-text-secondary hover:text-forno-text-primary transition-colors">
+                  <ShoppingCart size={20} strokeWidth={1.5} />
+                  {cartCount > 0 && (
+                    <motion.span
+                      key={cartCount}
+                      initial={{ scale: 1.3 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-0.5 -right-0.5 w-5 h-5 accent-gradient rounded-full flex items-center justify-center text-[11px] font-semibold text-white"
+                    >
+                      {cartCount}
+                    </motion.span>
+                  )}
+                </Link>
 
-            {user ? (
-              <div className="hidden md:flex items-center gap-3">
-                <Link to="/dashboard/orders" className="flex items-center gap-2 text-sm text-forno-text-secondary hover:text-forno-text-primary transition-colors">
-                  <User size={16} />
-                  <span className="max-w-[100px] truncate">{user.fullName}</span>
-                </Link>
-                <button onClick={handleLogout} className="p-2 text-forno-text-muted hover:text-forno-accent-red transition-colors">
-                  <LogOut size={16} />
-                </button>
-              </div>
-            ) : (
-              <div className="hidden md:flex items-center gap-3">
-                <Link to="/login" className="text-sm font-medium text-forno-text-secondary hover:text-forno-text-primary transition-colors">Sign In</Link>
-                <Link to="/register" className="px-4 py-2 text-sm font-semibold text-white accent-gradient rounded-button hover:brightness-110 transition-all">
-                  Get Started
-                </Link>
-              </div>
+                {user ? (
+                  <div className="hidden md:flex items-center gap-3">
+                    <Link to="/dashboard/orders" className="flex items-center gap-2 text-sm text-forno-text-secondary hover:text-forno-text-primary transition-colors">
+                      <User size={16} />
+                      <span className="max-w-[100px] truncate">{user.fullName}</span>
+                    </Link>
+                    <button onClick={handleLogout} className="p-2 text-forno-text-muted hover:text-forno-accent-red transition-colors">
+                      <LogOut size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="hidden md:flex items-center gap-3">
+                    <Link to="/login" className="text-sm font-medium text-forno-text-secondary hover:text-forno-text-primary transition-colors">Sign In</Link>
+                    <Link to="/register" className="px-4 py-2 text-sm font-semibold text-white accent-gradient rounded-button hover:brightness-110 transition-all">
+                      Get Started
+                    </Link>
+                  </div>
+                )}
+              </>
             )}
 
             <button className="md:hidden p-2 text-forno-text-secondary" onClick={() => setMobileOpen(true)}>
@@ -130,15 +134,19 @@ export default function Navbar() {
                 </Link>
               </motion.div>
             ))}
-            {user ? (
-              <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-                onClick={() => { handleLogout(); setMobileOpen(false); }}
-                className="text-lg text-forno-accent-red">Logout</motion.button>
-            ) : (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex flex-col gap-4 items-center">
-                <Link to="/login" onClick={() => setMobileOpen(false)} className="text-lg text-forno-text-primary">Sign In</Link>
-                <Link to="/register" onClick={() => setMobileOpen(false)} className="px-6 py-3 text-lg font-semibold accent-gradient rounded-button text-white">Get Started</Link>
-              </motion.div>
+            {!isAuthPage && (
+              <>
+                {user ? (
+                  <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
+                    onClick={() => { handleLogout(); setMobileOpen(false); }}
+                    className="text-lg text-forno-accent-red">Logout</motion.button>
+                ) : (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex flex-col gap-4 items-center">
+                    <Link to="/login" onClick={() => setMobileOpen(false)} className="text-lg text-forno-text-primary">Sign In</Link>
+                    <Link to="/register" onClick={() => setMobileOpen(false)} className="px-6 py-3 text-lg font-semibold accent-gradient rounded-button text-white">Get Started</Link>
+                  </motion.div>
+                )}
+              </>
             )}
           </motion.div>
         )}
