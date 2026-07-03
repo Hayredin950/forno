@@ -4,7 +4,7 @@ import { listPizzas, getPizzaById, listIngredients } from "../controllers/pizza.
 const router = Router();
 
 router.get("/", listPizzas);
-router.get("/:id", getPizzaById);
 router.get("/ingredients/all", listIngredients);
+router.get("/:id", getPizzaById);
 
 export default router;
