@@ -75,11 +75,11 @@ function mapPizza(p: any): Pizza {
     description: p.description ?? '',
     price: p.basePrice,
     category: p.category,
-    tags: [],
+    tags: p.tags ?? [],
     imageUrl: p.image ?? getPizzaImage(p.name),
-    ingredients: [],
-    isAvailable: true,
-    orderCount: 0,
+    ingredients: p.ingredients ?? [],
+    isAvailable: p.isAvailable ?? true,
+    orderCount: p.orderCount ?? 0,
   };
 }
 
@@ -317,17 +317,15 @@ export const authApi = {
 
 export const pizzaApi = {
   async getAll(filters?: { category?: string; tag?: string; sort?: string; search?: string }): Promise<{ success: boolean; data: { pizzas: Pizza[]; total: number } }> {
-    const res = await apiFetch('/pizzas');
-    let pizzas = ((res.data as { pizzas?: unknown[] }).pizzas ?? (Array.isArray(res.data) ? (res.data as unknown[]) : [])).map(mapPizza);
+    const params = new URLSearchParams();
+    if (filters?.category) params.set('category', filters.category);
+    if (filters?.tag) params.set('tag', filters.tag);
+    if (filters?.sort) params.set('sort', filters.sort);
+    if (filters?.search) params.set('search', filters.search);
 
-    if (filters?.category) pizzas = pizzas.filter(p => p.category === filters.category);
-    if (filters?.tag) pizzas = pizzas.filter(p => p.tags.includes(filters.tag!));
-    if (filters?.search) {
-      const q = filters.search.toLowerCase();
-      pizzas = pizzas.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-    }
-    if (filters?.sort === 'price_asc') pizzas.sort((a, b) => a.price - b.price);
-    if (filters?.sort === 'price_desc') pizzas.sort((a, b) => b.price - a.price);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiFetch(`/pizzas${query}`);
+    let pizzas = ((res.data as { pizzas?: unknown[] }).pizzas ?? (Array.isArray(res.data) ? (res.data as unknown[]) : [])).map(mapPizza);
 
     return { success: true, data: { pizzas, total: pizzas.length } };
   },
