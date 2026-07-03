@@ -93,6 +93,12 @@ export default function LoginPage() {
                 <p className="text-center text-sm text-forno-text-secondary mt-6">
                   Don't have an account? <Link to="/register" className="text-[#FF6B35] hover:underline">Sign Up</Link>
                 </p>
+
+                <div className="text-center mt-4">
+                  <Link to="/dashboard" className="text-sm text-forno-text-muted hover:text-forno-text-primary transition-colors">
+                    Already logged in? Go to Dashboard
+                  </Link>
+                </div>
               </motion.form>
             </AnimatePresence>
           </div>

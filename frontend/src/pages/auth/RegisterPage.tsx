@@ -92,6 +92,12 @@ export default function RegisterPage() {
                 {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Create Account'}
               </button>
               <p className="text-center text-sm text-forno-text-secondary mt-6">Already have an account? <Link to="/login" className="text-[#FF6B35] hover:underline">Sign In</Link></p>
+
+              <div className="text-center mt-4">
+                <Link to="/dashboard" className="text-sm text-forno-text-muted hover:text-forno-text-primary transition-colors">
+                  Already logged in? Go to Dashboard
+                </Link>
+              </div>
             </form>
           </div>
         </motion.div>
