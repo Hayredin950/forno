@@ -1,6 +1,9 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -52,6 +55,21 @@ app.use(
 
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+
+// Serve the pizza/ingredient images directly from the repo on the API host.
+// This keeps image URLs like /images/... working even if the frontend is on
+// a different origin. Resolves the repo's frontend/public/images directory
+// (both in dev from ./src and in prod from ./dist), or IMAGES_DIR if set.
+const IMAGES_DIR =
+  process.env["IMAGES_DIR"] ??
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/public/images");
+
+if (existsSync(IMAGES_DIR)) {
+  app.use("/images", express.static(IMAGES_DIR, { maxAge: "7d", immutable: true }));
+  logger.info({ dir: IMAGES_DIR }, "Serving /images from repo");
+} else {
+  logger.warn("Image directory not found; /images will 404 — set IMAGES_DIR to fix");
+}
 
 // Strip MongoDB query operators ($gt, $regex, $where …) from all bodies and
 // query strings — blocks NoSQL injection before it reaches mongoose filters.

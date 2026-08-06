@@ -14,6 +14,26 @@ const CART_KEY = 'forno_cart_v2';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
 const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY);
 
+// Seeded pizzas store a repo-relative path like "/images/1_Pepperoni_pizza.png".
+// The backend now serves those files too, so resolve them against the API
+// origin (https://…/images/…) — that guarantees they load regardless of which
+// frontend origin the app is served from. Already-absolute URLs pass through,
+// and /images/… relative paths without a foreign API origin stay same-origin.
+const API_ORIGIN = (() => {
+  try {
+    return new URL(API_BASE).origin;
+  } catch {
+    return '';
+  }
+})();
+
+function resolveImageUrl(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  if (/^https?:\/\//.test(raw)) return raw;
+  if (API_ORIGIN && raw.startsWith('/images/')) return `${API_ORIGIN}${raw}`;
+  return raw;
+}
+
 // ─── Base fetch helpers ───────────────────────────────────────────────────
 
 async function apiFetch(path: string, options: RequestInit = {}) {
@@ -93,7 +113,7 @@ function mapPizza(p: any): Pizza {
     price: p.price ?? p.basePrice,
     category: p.category,
     tags: p.tags ?? [],
-    imageUrl: p.imageUrl ?? p.image ?? getPizzaImage(p.name),
+    imageUrl: resolveImageUrl(p.imageUrl ?? p.image) ?? getPizzaImage(p.name),
     ingredients: p.ingredients ?? [],
     isAvailable: p.isAvailable ?? true,
     orderCount: p.orderCount ?? 0,
@@ -118,7 +138,7 @@ function mapIngredient(ing: any): InventoryItem {
     threshold: ing.lowStockThreshold ?? 10,
     unitPrice: ing.price ?? 0,
     isAvailable: ing.isAvailable ?? stock > 0,
-    imageUrl: ing.imageUrl ?? ing.image ?? undefined,
+    imageUrl: resolveImageUrl(ing.imageUrl ?? ing.image) ?? undefined,
   };
 }
 
