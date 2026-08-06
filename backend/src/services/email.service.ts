@@ -8,6 +8,13 @@ interface SendEmailOptions {
 }
 
 export const sendEmail = async (opts: SendEmailOptions): Promise<void> => {
+  // If SMTP isn't configured (e.g. demo/production without credentials),
+  // log the email instead of crashing the request flow.
+  if (!process.env["SMTP_HOST"] || !process.env["SMTP_USER"] || !process.env["SMTP_PASS"]) {
+    logger.info({ to: opts.to, subject: opts.subject }, "SMTP not configured - email skipped (logged only)");
+    return;
+  }
+
   const mailer = await getMailer();
   const from = process.env["SMTP_FROM"] ?? "Forno <noreply@forno.local>";
 
