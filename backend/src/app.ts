@@ -9,14 +9,20 @@ import { errorHandler } from "./middleware/errorHandler";
 
 const app: Express = express();
 
+// Origins are normalized (lowercase, no trailing slash) so values like
+// "https://forno-ten.vercel.app/" still match the browser Origin header
+// "https://forno-ten.vercel.app".
+const normalize = (s: string) => s.trim().toLowerCase().replace(/\/+$/, "");
+
 const allowedOrigins = (process.env["CLIENT_URL"] ?? "http://localhost:5173,http://localhost:3000")
   .split(",")
-  .map((s) => s.trim());
+  .map(normalize)
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      if (!origin || allowedOrigins.includes(normalize(origin))) return cb(null, true);
       cb(new Error(`CORS policy: origin ${origin} not allowed`));
     },
     credentials: true,
