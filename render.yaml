@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: forno-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Users are auto-verified on registration; flip to false and add SMTP
+      # credentials if you want email verification.
+      - key: SKIP_EMAIL_VERIFICATION
+        value: "true"
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_USER_SECRET
+        sync: false
+      - key: JWT_ADMIN_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false
