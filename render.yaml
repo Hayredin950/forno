@@ -23,3 +23,7 @@ services:
         sync: false
       - key: CLIENT_URL
         sync: false
+      # Google OAuth (optional) — create OAuth 2.0 Client ID at
+      # https://console.cloud.google.com/apis/credentials
+      - key: GOOGLE_CLIENT_ID
+        sync: false
