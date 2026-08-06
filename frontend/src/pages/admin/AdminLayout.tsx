@@ -1,12 +1,13 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza } from 'lucide-react';
 import { authApi } from '@/services/api';
 import { inventoryApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+  { label: 'Pizzas', path: '/admin/pizzas', icon: Pizza },
   { label: 'Inventory', path: '/admin/inventory', icon: Package },
   { label: 'Orders', path: '/admin/orders', icon: ShoppingBag },
   { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },

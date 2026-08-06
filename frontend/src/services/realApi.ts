@@ -1,6 +1,9 @@
 import type { User, Admin, Pizza, InventoryItem, CartItem, Order, OrderStatus, DashboardStats, ChartData } from '@/types';
 
-const API_BASE = '/api';
+// In production the API lives on a different origin, so the backend URL is
+// injected at build time via VITE_API_BASE_URL. Falls back to the same-origin
+// `/api` path (Vite dev proxy / backend-served static files).
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const TOKEN_KEY = 'forno_token';
 const ADMIN_TOKEN_KEY = 'forno_admin_token';
@@ -11,7 +14,7 @@ const CART_KEY = 'forno_cart';
 const getToken = () => localStorage.getItem(TOKEN_KEY);
 const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY);
 
-// ─── Base fetch helpers ────────────────────────────────────────────────────
+// ─── Base fetch helpers ───────────────────────────────────────────────────
 
 async function apiFetch(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -37,7 +40,7 @@ async function adminFetch(path: string, options: RequestInit = {}) {
   });
 }
 
-// ─── Status mappings ───────────────────────────────────────────────────────
+// ─── Status mappings ──────────────────────────────────────────────────────
 
 const STATUS_FE_TO_BE: Record<string, string> = {
   received: 'Order Received',
@@ -54,7 +57,7 @@ const STATUS_BE_TO_FE: Record<string, OrderStatus> = {
   'Delivered': 'completed',
 };
 
-// ─── Data mappers ──────────────────────────────────────────────────────────
+// ─── Data mappers ─────────────────────────────────────────────────────────
 
 function getPizzaImage(name: string): string {
   const n = name.toLowerCase();
@@ -73,7 +76,7 @@ function mapPizza(p: any): Pizza {
     _id: String(p._id),
     name: p.name,
     description: p.description ?? '',
-    price: p.basePrice,
+    price: p.price ?? p.basePrice,
     category: p.category,
     tags: p.tags ?? [],
     imageUrl: p.image ?? getPizzaImage(p.name),
@@ -162,9 +165,16 @@ function mapOrder(o: any): Order {
       amount: total,
     },
     deliveryAddress: o.deliveryAddress ?? { street: '', city: '', state: '', pincode: '' },
-    estimatedTime: new Date(new Date(o.createdAt).getTime() + 30 * 60000).toISOString(),
-    createdAt: o.createdAt,
-    updatedAt: o.updatedAt ?? o.createdAt,
+    // o.createdAt can be missing on partial/minimal API responses — guard
+    // against `new Date(undefined)` producing an Invalid Date, which throws
+    // a RangeError from .toISOString() and used to blank the whole page.
+    estimatedTime: (() => {
+      const base = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+      const from = Number.isNaN(base) ? Date.now() : base;
+      return new Date(from + 30 * 60000).toISOString();
+    })(),
+    createdAt: o.createdAt ?? new Date().toISOString(),
+    updatedAt: o.updatedAt ?? o.createdAt ?? new Date().toISOString(),
     userName,
     userEmail,
   };
@@ -334,6 +344,40 @@ export const pizzaApi = {
     const res = await apiFetch(`/pizzas/${id}`);
     return { success: true, data: { pizza: mapPizza(res.data) } };
   },
+
+  async adminGetAll(): Promise<{ success: boolean; data: { pizzas: Pizza[]; total: number } }> {
+    const res = await adminFetch('/pizzas/admin/list');
+    let pizzas = ((res.data as { pizzas?: unknown[] }).pizzas ?? (Array.isArray(res.data) ? (res.data as unknown[]) : [])).map(mapPizza);
+    return { success: true, data: { pizzas, total: pizzas.length } };
+  },
+
+  async adminCreate(pizza: { name: string; description?: string; price: number; category: string; tags?: string[]; imageUrl?: string; ingredients?: string[]; isAvailable?: boolean }): Promise<{ success: boolean; data: { pizza: Pizza } }> {
+    const res = await adminFetch('/pizzas/admin/create', {
+      method: 'POST',
+      body: JSON.stringify(pizza)
+    });
+    return { success: true, data: { pizza: mapPizza(res.data) } };
+  },
+
+  async adminUpdate(id: string, pizza: Partial<{ name?: string; description?: string; price?: number; category?: string; tags?: string[]; imageUrl?: string; ingredients?: string[]; isAvailable?: boolean }>): Promise<{ success: boolean; data: { pizza: Pizza } }> {
+    const res = await adminFetch(`/pizzas/admin/update/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(pizza)
+    });
+    return { success: true, data: { pizza: mapPizza(res.data) } };
+  },
+
+  async adminDelete(id: string): Promise<{ success: boolean; message?: string }> {
+    await adminFetch(`/pizzas/admin/delete/${id}`, { method: 'DELETE' });
+    return { success: true };
+  },
+
+  async adminToggleAvailability(id: string): Promise<{ success: boolean; data: { pizza: Pizza } }> {
+    const res = await adminFetch(`/pizzas/admin/toggle/${id}`, {
+      method: 'PATCH'
+    });
+    return { success: true, data: { pizza: mapPizza(res.data) } };
+  }
 };
 
 // ─── Inventory ─────────────────────────────────────────────────────────────
@@ -351,6 +395,17 @@ export const inventoryApi = {
 
     const lowStockCount = items.filter(i => i.currentStock < i.threshold).length;
     return { success: true, data: { items, lowStockCount } };
+  },
+
+  // The Build-Your-Own pizza page needs every ingredient across all
+  // categories, unfiltered, and is used by regular (non-admin) users —
+  // GET /admin/inventory is intentionally public, so hit it without an
+  // admin token rather than reusing adminFetch/getAll.
+  async getAllForBuilder(): Promise<{ success: boolean; data: { items: InventoryItem[] } }> {
+    const res = await apiFetch('/admin/inventory');
+    const rawItems = Array.isArray(res.data) ? (res.data as unknown[]) : [];
+    const items = rawItems.map(mapIngredient).filter(i => i.isAvailable);
+    return { success: true, data: { items } };
   },
 
   async update(id: string, data: { currentStock?: number; threshold?: number }): Promise<{ success: boolean; data: { item: InventoryItem } }> {
@@ -396,7 +451,21 @@ interface RazorpayPaymentResult {
 export const razorpayApi = {
   async createOrder(orderId: string, _amount: number): Promise<{ success: boolean; data: RazorpayPaymentResult }> {
     const res = await authFetch(`/orders/${orderId}/payment`, { method: 'POST' });
-    const payload = res.data as { razorpayOrderId: string; amount: number; currency: string; keyId: string };
+    const payload = res.data as { razorpayOrderId: string; amount: number; currency: string; keyId: string; mock?: boolean };
+
+    // No real Razorpay credentials configured on the backend (dev/test
+    // environment) — the server already told us via `mock: true`, so skip
+    // the real checkout widget entirely and simulate an instant success.
+    if (payload.mock) {
+      return {
+        success: true,
+        data: {
+          razorpayOrderId: payload.razorpayOrderId,
+          razorpayPaymentId: `pay_mock_${Math.random().toString(36).slice(2)}`,
+          razorpaySignature: `sig_mock_${Math.random().toString(36).slice(2)}`,
+        },
+      };
+    }
 
     return new Promise((resolve, reject) => {
       if (!(window as Window & { Razorpay?: unknown }).Razorpay) {
@@ -477,8 +546,11 @@ export const orderApi = {
   },
 
   async getById(id: string): Promise<{ success: boolean; data: { order: Order } }> {
-    const res = await authFetch(`/orders/${id}/status`);
-    return { success: true, data: { order: mapOrder({ _id: id, ...res.data }) } };
+    // GET /orders/:id/status is a minimal polling endpoint (no items, no
+    // createdAt, no address) — use the full-detail endpoint here instead so
+    // the order tracking page has everything it needs to render.
+    const res = await authFetch(`/orders/${id}`);
+    return { success: true, data: { order: mapOrder(res.data) } };
   },
 
   async getStatus(orderId: string): Promise<{ success: boolean; data: { orderId: string; status: OrderStatus; updatedAt: string; estimatedTime: string } }> {
@@ -530,7 +602,7 @@ export const adminOrderApi = {
       method: 'PATCH',
       body: JSON.stringify({ orderStatus: backendStatus }),
     });
-    return { success: true, data: { order: mapOrder({ _id: id, ...res.data }) } };
+    return { success: true, data: { order: mapOrder({ _id: id, ...(res.data as Record<string, unknown>) }) } };
   },
 };
 

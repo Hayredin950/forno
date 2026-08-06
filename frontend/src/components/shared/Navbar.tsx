@@ -33,14 +33,12 @@ export default function Navbar() {
 
   const handleLogout = () => { authApi.logout(); setUser(null); navigate('/'); };
 
-  const navLinks = isAuthPage 
-    ? [{ label: 'Home', path: '/' }]
-    : [
-        { label: 'Home', path: '/' },
-        { label: 'Menu', path: '/dashboard' },
-        { label: 'Build Your Own', path: '/dashboard/builder' },
-        ...(user ? [{ label: 'My Orders', path: '/dashboard/orders' }] : []),
-      ];
+  const navLinks = [
+    { label: 'Home', path: '/' },
+    { label: 'Menu', path: '/dashboard' },
+    { label: 'Build Your Own', path: '/dashboard/builder' },
+    ...(user ? [{ label: 'My Orders', path: '/dashboard/orders' }] : []),
+  ];
 
   return (
     <>
@@ -60,16 +58,18 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map(link => (
-              <Link key={link.path} to={link.path} className="relative text-sm font-medium text-forno-text-secondary hover:text-forno-text-primary transition-colors duration-200 py-1">
-                {link.label}
-                {!isAuthPage && location.pathname === link.path && (
-                  <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 accent-gradient rounded-full" />
-                )}
-              </Link>
-            ))}
-          </div>
+          {!isAuthPage && (
+            <div className="hidden md:flex items-center gap-8">
+              {navLinks.map(link => (
+                <Link key={link.path} to={link.path} className="relative text-sm font-medium text-forno-text-secondary hover:text-forno-text-primary transition-colors duration-200 py-1">
+                  {link.label}
+                  {location.pathname === link.path && (
+                    <motion.div layoutId="nav-underline" className="absolute bottom-0 left-0 right-0 h-0.5 accent-gradient rounded-full" />
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center gap-4">
             {!isAuthPage && (
@@ -109,9 +109,11 @@ export default function Navbar() {
               </>
             )}
 
-            <button className="md:hidden p-2 text-forno-text-secondary" onClick={() => setMobileOpen(true)}>
-              <Menu size={24} />
-            </button>
+            {!isAuthPage && (
+              <button className="md:hidden p-2 text-forno-text-secondary" onClick={() => setMobileOpen(true)}>
+                <Menu size={24} />
+              </button>
+            )}
           </div>
         </div>
       </motion.nav>
@@ -127,15 +129,15 @@ export default function Navbar() {
             <button className="absolute top-6 right-6 text-forno-text-secondary" onClick={() => setMobileOpen(false)}>
               <X size={28} />
             </button>
-            {navLinks.map((link, i) => (
-              <motion.div key={link.path} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                <Link to={link.path} onClick={() => setMobileOpen(false)} className="text-2xl font-medium text-forno-text-primary hover:text-[#FF6B35] transition-colors">
-                  {link.label}
-                </Link>
-              </motion.div>
-            ))}
             {!isAuthPage && (
               <>
+                {navLinks.map((link, i) => (
+                  <motion.div key={link.path} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                    <Link to={link.path} onClick={() => setMobileOpen(false)} className="text-2xl font-medium text-forno-text-primary hover:text-[#FF6B35] transition-colors">
+                      {link.label}
+                    </Link>
+                  </motion.div>
+                ))}
                 {user ? (
                   <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
                     onClick={() => { handleLogout(); setMobileOpen(false); }}

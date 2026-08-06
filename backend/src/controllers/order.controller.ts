@@ -2,7 +2,13 @@ import type { Request, Response, NextFunction } from "express";
 import { Order } from "../models/Order";
 import { Pizza } from "../models/Pizza";
 import { Ingredient } from "../models/Ingredient";
-import { createRazorpayOrder, verifyRazorpaySignature } from "../services/payment.service";
+import {
+  createRazorpayOrder,
+  createMockRazorpayOrder,
+  isMockRazorpayOrderId,
+  isRazorpayConfigured,
+  verifyRazorpaySignature,
+} from "../services/payment.service";
 import { checkStockAvailability, decrementStockForOrder } from "../services/stock.service";
 import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
@@ -62,13 +68,22 @@ export const initiatePayment = asyncHandler(async (req: AuthUserRequest, res: Re
   if (order.paymentStatus === "paid") return next(new ApiError(409, "Order already paid"));
 
   const amountInPaise = Math.round(order.totalAmount * 100);
-  const rzpOrder = await createRazorpayOrder(amountInPaise, String(order._id));
+  const configured = isRazorpayConfigured();
+  const rzpOrder = configured
+    ? await createRazorpayOrder(amountInPaise, String(order._id))
+    : createMockRazorpayOrder(amountInPaise);
 
   order.razorpayOrderId = rzpOrder.id;
   await order.save();
 
   const keyId = process.env["RAZORPAY_KEY_ID"];
-  sendSuccess(res, { razorpayOrderId: rzpOrder.id, amount: rzpOrder.amount, currency: rzpOrder.currency, keyId });
+  sendSuccess(res, {
+    razorpayOrderId: rzpOrder.id,
+    amount: rzpOrder.amount,
+    currency: rzpOrder.currency,
+    keyId,
+    mock: !configured,
+  });
 });
 
 export const verifyPayment = asyncHandler(async (req: AuthUserRequest, res: Response, next: NextFunction) => {
@@ -83,7 +98,12 @@ export const verifyPayment = asyncHandler(async (req: AuthUserRequest, res: Resp
   if (!order) return next(new ApiError(404, "Order not found"));
   if (order.paymentStatus === "paid") return next(new ApiError(409, "Order already paid"));
 
-  const valid = verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
+  // Orders paid through the simulated (no real Razorpay credentials) flow
+  // never had a genuine HMAC signature to check — trust the mock handshake
+  // instead of calling verifyRazorpaySignature, which would always fail it.
+  const valid = isMockRazorpayOrderId(order.razorpayOrderId)
+    ? razorpayOrderId === order.razorpayOrderId && !!razorpayPaymentId
+    : verifyRazorpaySignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
   if (!valid) {
     order.paymentStatus = "failed";
     await order.save();
@@ -106,6 +126,16 @@ export const myOrders = asyncHandler(async (req: AuthUserRequest, res: Response)
     .sort({ createdAt: -1 })
     .populate("items.pizzaRef", "name image basePrice");
   sendSuccess(res, orders);
+});
+
+export const getOrderById = asyncHandler(async (req: AuthUserRequest, res: Response, next: NextFunction) => {
+  const { id } = req.params as { id: string };
+  const order = await Order.findOne({ _id: id, user: req.userId }).populate(
+    "items.pizzaRef",
+    "name image basePrice",
+  );
+  if (!order) return next(new ApiError(404, "Order not found"));
+  sendSuccess(res, order);
 });
 
 export const orderStatus = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {

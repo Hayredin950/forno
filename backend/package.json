@@ -30,6 +30,7 @@
     "razorpay": "^2.9.6"
   },
   "devDependencies": {
+    "esbuild": "^0.28.1",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

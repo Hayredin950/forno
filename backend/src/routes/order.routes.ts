@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { createOrder, initiatePayment, verifyPayment, myOrders, orderStatus } from "../controllers/order.controller";
+import { createOrder, initiatePayment, verifyPayment, myOrders, orderStatus, getOrderById } from "../controllers/order.controller";
 import { authUser } from "../middleware/authUser";
 import { validate } from "../middleware/validate";
 import { apiLimiter } from "../middleware/rateLimiter";
@@ -34,5 +34,10 @@ router.post(
 router.get("/my-orders", authUser, myOrders);
 
 router.get("/:id/status", orderStatus);
+
+// Full order detail, scoped to the requesting user — must stay after the
+// more specific "/my-orders" and "/:id/status" routes above, or ":id"
+// would greedily swallow those paths.
+router.get("/:id", authUser, getOrderById);
 
 export default router;

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ClipboardCheck, Flame, Bike, ArrowLeft } from 'lucide-react';
+import { useToast } from '@/components/shared/Toaster';
 import type { OrderStatus } from '@/types';
-import { orderApi } from '@/services/mockApi'; // Keep using mockApi for orders for now
+import { orderApi } from '@/services/api';
 import type { Order } from '@/types';
 
 const STATUS_STEPS: { status: string; label: string; icon: typeof ClipboardCheck; color: string }[] = [
@@ -14,6 +15,8 @@ const STATUS_STEPS: { status: string; label: string; icon: typeof ClipboardCheck
 
 export default function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
+  const navigate = useNavigate();
+  const toast = useToast();
   const [order, setOrder] = useState<Order | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('received');
   const [eta, setEta] = useState(25 * 60);
@@ -44,7 +47,12 @@ export default function OrderTrackingPage() {
       const res = await orderApi.getById(orderId!);
       setOrder(res.data.order);
       setCurrentStatus(res.data.order.status);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Failed to load order:', err);
+      toast('Failed to load order details', 'error');
+      // If order not found, redirect to orders page
+      navigate('/dashboard/orders');
+    }
   };
 
   const currentStepIdx = STATUS_STEPS.findIndex(s => s.status === currentStatus);
@@ -57,14 +65,16 @@ export default function OrderTrackingPage() {
 
   if (!order) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-8 h-8 border-2 border-[#FF6B35]/30 border-t-[#FF6B35] rounded-full animate-spin" />
+      <div className="max-w-3xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="w-8 h-8 border-2 border-[#FF6B35]/30 border-t-[#FF6B35] rounded-full animate-spin" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-3xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
       <Link to="/dashboard/orders" className="flex items-center gap-2 text-sm text-forno-text-secondary hover:text-forno-text-primary mb-6 transition-colors">
         <ArrowLeft size={16} /> Back to Orders
       </Link>

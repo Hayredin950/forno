@@ -12,7 +12,11 @@ router.use(healthRouter);
 router.use("/auth", authRouter);
 router.use("/pizzas", pizzaRouter);
 router.use("/orders", orderRouter);
-router.use("/admin", adminRouter);
+// More specific "/admin/inventory" must be mounted before the blanket
+// "/admin" router (which requires authAdmin on every path under it),
+// otherwise inventory's intentionally-public GET / route gets shadowed
+// and always 401s before Express reaches inventoryRouter.
 router.use("/admin/inventory", inventoryRouter);
+router.use("/admin", adminRouter);
 
 export default router;

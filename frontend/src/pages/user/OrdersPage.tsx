@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ClipboardList } from 'lucide-react';
-import { orderApi } from '@/services/mockApi'; // Keep using mockApi for orders for now
+import { orderApi } from '@/services/api';
 import type { Order } from '@/types';
 
 const statusColors: Record<string, string> = {
@@ -21,28 +21,40 @@ export default function OrdersPage() {
 
   const loadOrders = async () => {
     setLoading(true);
-    const res = await orderApi.getMyOrders();
-    setOrders(res.data.orders);
-    setLoading(false);
+    try {
+      const res = await orderApi.getMyOrders();
+      setOrders(res.data.orders);
+    } catch (err) {
+      console.error('Failed to load orders:', err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-2 border-[#FF6B35]/30 border-t-[#FF6B35] rounded-full animate-spin" /></div>;
+    return (
+      <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
+        <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-2 border-[#FF6B35]/30 border-t-[#FF6B35] rounded-full animate-spin" /></div>
+      </div>
+    );
   }
 
   if (orders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <ClipboardList size={48} className="text-forno-text-muted mb-4" />
-        <h3 className="text-lg font-semibold text-forno-text-primary mb-2">No orders yet</h3>
-        <p className="text-sm text-forno-text-secondary mb-6">Start ordering some delicious pizza!</p>
-        <Link to="/dashboard" className="px-6 py-2 accent-gradient rounded-button text-white font-medium hover:brightness-110 transition-all">Browse Menu</Link>
+      <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <ClipboardList size={48} className="text-forno-text-muted mb-4" />
+          <h3 className="text-lg font-semibold text-forno-text-primary mb-2">No orders yet</h3>
+          <p className="text-sm text-forno-text-secondary mb-6">Start ordering some delicious pizza!</p>
+          <Link to="/dashboard" className="px-6 py-2 accent-gradient rounded-button text-white font-medium hover:brightness-110 transition-all">Browse Menu</Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
       <h2 className="text-2xl font-semibold text-forno-text-primary mb-6">My Orders</h2>
       <div className="space-y-4">
         {orders.map((order, i) => (

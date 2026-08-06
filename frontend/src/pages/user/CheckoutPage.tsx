@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, ChevronDown, ChevronUp, MapPin, ShoppingCart } from 'lucide-react';
-import { cartApi } from '@/services/api';
-import { orderApi, razorpayApi } from '@/services/mockApi';
+import { cartApi, orderApi, razorpayApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { CartItem, Order } from '@/types';
 
@@ -35,13 +34,13 @@ export default function CheckoutPage() {
     } else {
       const item = cartItems.find(i => i.id === itemId);
       if (item) {
-        await cartApi.updateItem(itemId, newQuantity);
+        await cartApi.updateQuantity(itemId, newQuantity);
         setCartItems(items => items.map(i => i.id === itemId ? { ...i, quantity: newQuantity, totalPrice: item.unitPrice * newQuantity } : i));
       }
     }
   };
 
-  const subtotal = cartItems.reduce((s, i) => s + i.totalPrice, 0);
+  const subtotal = cartItems.reduce((s, i) => s + (i.totalPrice || (i.unitPrice * i.quantity) || 0), 0);
   const tax = Math.round(subtotal * 0.05 * 100) / 100;
   const deliveryFee = subtotal >= 500 ? 0 : 40;
   const total = subtotal + tax + deliveryFee;
@@ -52,19 +51,12 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
+      // Pass full cart items through as-is (not a hand-picked subset) —
+      // custom pizzas need baseId/sauceId/cheeseId/veggieIds to resolve
+      // real ingredient ObjectIds server-side; dropping them would silently
+      // fall back to ingredient names, which the backend can't look up.
       const orderRes = await orderApi.create({
-        items: cartItems.map(c => ({
-          type: c.type,
-          name: c.name,
-          pizzaId: c.pizzaId,
-          base: c.base,
-          sauce: c.sauce,
-          cheese: c.cheese,
-          veggies: c.veggies,
-          quantity: c.quantity,
-          unitPrice: c.unitPrice,
-          totalPrice: c.totalPrice,
-        })),
+        items: cartItems,
         deliveryAddress: address,
       });
 
@@ -108,7 +100,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="max-w-2xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
       <h2 className="text-2xl font-semibold text-forno-text-primary mb-6">Order Summary</h2>
 
       <div className="glass-card p-6 mb-6">

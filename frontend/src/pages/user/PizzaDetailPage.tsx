@@ -31,18 +31,16 @@ export default function PizzaDetailPage() {
   const addToCart = async () => {
     if (!pizza) return;
     setAdding(true);
-    for (let i = 0; i < quantity; i++) {
-      await cartApi.addItem({
-        id: `pizza_${pizza._id}_${Date.now()}_${i}`,
-        type: 'pizza',
-        name: pizza.name,
-        pizzaId: pizza._id,
-        imageUrl: pizza.imageUrl,
-        quantity: 1,
-        unitPrice: pizza.price,
-        totalPrice: pizza.price,
-      });
-    }
+    await cartApi.addItem({
+      id: `pizza_${pizza._id}`,
+      type: 'pizza',
+      name: pizza.name,
+      pizzaId: pizza._id,
+      imageUrl: pizza.imageUrl,
+      quantity: quantity,
+      unitPrice: pizza.price,
+      totalPrice: pizza.price * quantity,
+    });
     toast(`${quantity}x ${pizza.name} added to cart!`);
     setAdding(false);
   };
@@ -56,7 +54,7 @@ export default function PizzaDetailPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
       <Link to="/dashboard" className="inline-flex items-center gap-2 text-forno-text-secondary hover:text-forno-text-primary mb-6 transition-colors">
         <ArrowLeft size={20} />
         Back to Menu

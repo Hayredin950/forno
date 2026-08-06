@@ -20,6 +20,7 @@ import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminInventory from '@/pages/admin/AdminInventory';
 import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
+import AdminPizzas from '@/pages/admin/AdminPizzas';
 import PizzaDetailPage from '@/pages/user/PizzaDetailPage';
 import { Toaster } from '@/components/shared/Toaster';
 
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/admin/login" element={<PublicLayout><AdminLoginPage /></PublicLayout>} />
           <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
             <Route index element={<AdminDashboard />} />
+            <Route path="pizzas" element={<AdminPizzas />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="analytics" element={<AdminAnalytics />} />

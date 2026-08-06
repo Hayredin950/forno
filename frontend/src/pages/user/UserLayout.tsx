@@ -7,9 +7,7 @@ export default function UserLayout() {
     <>
       <Navbar />
       <main className="min-h-screen bg-forno-bg-primary pt-20">
-        <div className="p-6 lg:p-8">
-          <Outlet />
-        </div>
+        <Outlet />
       </main>
       <Footer />
     </>

@@ -110,7 +110,7 @@ export default function BuilderPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12 lg:py-16">
       {/* Step Progress */}
       <div className="mb-8">
         <div className="flex items-center justify-between max-w-lg mx-auto">

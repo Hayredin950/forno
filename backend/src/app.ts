@@ -24,7 +24,6 @@ app.use(
 );
 
 app.use(helmet());
-app.use(mongoSanitize());
 
 app.use(
   pinoHttp({
