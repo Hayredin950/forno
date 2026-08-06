@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { listInventory, updateStock, updateThreshold, adjustStock } from "../controllers/inventory.controller";
+import { listInventory, updateStock, updateThreshold, adjustStock, createIngredient, deleteIngredient } from "../controllers/inventory.controller";
 import { authAdmin } from "../middleware/authAdmin";
 import { validate } from "../middleware/validate";
 
@@ -11,6 +11,19 @@ router.get("/", listInventory);
 
 // Admin only routes
 router.use(authAdmin);
+
+router.post(
+  "/",
+  [
+    body("type").isIn(["base", "sauce", "cheese", "vegetable"]).withMessage("type must be base, sauce, cheese, or vegetable"),
+    body("name").trim().notEmpty().withMessage("name is required"),
+    body("unit").trim().notEmpty().withMessage("unit is required"),
+  ],
+  validate,
+  createIngredient,
+);
+
+router.delete("/:id", deleteIngredient);
 
 router.patch(
   "/:id",

@@ -2,6 +2,8 @@ import { useRef, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { ChevronDown, Pointer, Layers, Flame, Bike } from 'lucide-react';
+import { pizzaApi } from '@/services/api';
+import type { Pizza } from '@/types';
 
 function CountUp({ target, suffix = '', duration = 1500 }: { target: number; suffix?: string; duration?: number }) {
   const [count, setCount] = useState(0);
@@ -24,15 +26,6 @@ function CountUp({ target, suffix = '', duration = 1500 }: { target: number; suf
   return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 }
 
-const featuredPizzas = [
-  { name: 'Margherita Classica', desc: 'San Marzano tomatoes, fresh mozzarella, basil', price: 299, img: import.meta.env.BASE_URL + 'images/pizza-margherita.jpg' },
-  { name: 'Pepperoni Fire', desc: 'Double pepperoni, mozzarella, chili flakes', price: 399, img: import.meta.env.BASE_URL + 'images/pizza-pepperoni.jpg' },
-  { name: 'BBQ Chicken', desc: 'Grilled chicken, BBQ sauce, red onions, cilantro', price: 449, img: import.meta.env.BASE_URL + 'images/pizza-bbq.jpg' },
-  { name: 'Veggie Supreme', desc: 'Bell peppers, olives, onions, tomatoes, corn', price: 349, img: import.meta.env.BASE_URL + 'images/pizza-veggie.jpg' },
-  { name: 'Four Cheese', desc: 'Mozzarella, cheddar, parmesan, gorgonzola', price: 429, img: import.meta.env.BASE_URL + 'images/pizza-four-cheese.jpg' },
-  { name: 'Truffle Mushroom', desc: 'Truffle oil, wild mushrooms, mozzarella, thyme', price: 499, img: import.meta.env.BASE_URL + 'images/pizza-truffle.jpg' },
-];
-
 const steps = [
   { icon: Pointer, num: '01', title: 'Choose', desc: 'Browse our menu or start from scratch with the builder.' },
   { icon: Layers, num: '02', title: 'Build', desc: 'Pick your base, sauce, cheese, and toppings. Watch it come alive.' },
@@ -50,6 +43,15 @@ const stats = [
 export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState(true);
+  const [featuredPizzas, setFeaturedPizzas] = useState<Pizza[]>([]);
+
+  // Featured pizzas come from the database (most-ordered, available only) —
+  // never hardcoded, so menu changes show up here automatically.
+  useEffect(() => {
+    pizzaApi.getAll({ sort: 'popular' }).then((res) => {
+      if (res.success) setFeaturedPizzas(res.data.pizzas.slice(0, 6));
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrollIndicatorVisible(window.scrollY < 100);
@@ -149,14 +151,14 @@ export default function LandingPage() {
               >
                 <div className="overflow-hidden aspect-[4/3]">
                   <img
-                    src={pizza.img}
+                    src={pizza.imageUrl}
                     alt={pizza.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                 </div>
                 <div className="p-5">
                   <h3 className="text-lg font-semibold text-forno-text-primary mb-1">{pizza.name}</h3>
-                  <p className="text-sm text-forno-text-secondary mb-3 line-clamp-2">{pizza.desc}</p>
+                  <p className="text-sm text-forno-text-secondary mb-3 line-clamp-2">{pizza.description}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-lg font-mono font-semibold text-forno-text-primary">From ₹{pizza.price}</span>
                     <Link to="/dashboard" className="px-4 py-2 text-sm font-medium accent-gradient text-white rounded-button hover:brightness-110 transition-all">

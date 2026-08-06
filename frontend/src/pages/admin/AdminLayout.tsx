@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users } from 'lucide-react';
 import { authApi } from '@/services/api';
 import { inventoryApi } from '@/services/api';
 import { useState, useEffect } from 'react';
@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Inventory', path: '/admin/inventory', icon: Package },
   { label: 'Orders', path: '/admin/orders', icon: ShoppingBag },
   { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
+  { label: 'Users', path: '/admin/users', icon: Users },
 ];
 
 export default function AdminLayout() {

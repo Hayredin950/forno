@@ -1,4 +1,5 @@
 import "dotenv/config";
+import mongoose from "mongoose";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { connectDB } from "./config/db";
@@ -11,13 +12,19 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const bootstrap = async (): Promise<void> => {
-  try {
-    await connectDB();
-  } catch (err) {
-    logger.warn({ err }, "Database connection failed - continuing without database");
-  }
+// Cron jobs need a live DB connection, which may arrive after boot when
+// connectDB is retrying in the background — hook into mongoose's event.
+let cronStarted = false;
+const ensureCronStarted = (): void => {
+  if (cronStarted) return;
+  cronStarted = true;
   startCronJobs();
+};
+mongoose.connection.on("connected", ensureCronStarted);
+
+const bootstrap = async (): Promise<void> => {
+  await connectDB();
+  if (mongoose.connection.readyState === 1) ensureCronStarted();
 
   app.listen(port, (err?: Error) => {
     if (err) {

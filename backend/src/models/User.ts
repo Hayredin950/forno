@@ -9,6 +9,8 @@ export interface IUser extends Document {
   resetPasswordToken: string | null;
   resetPasswordExpires: Date | null;
   role: "user";
+  googleId: string | null;
+  isActive: boolean;
   createdAt: Date;
 }
 
@@ -22,6 +24,8 @@ const userSchema = new Schema<IUser>(
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
     role: { type: String, default: "user", enum: ["user"] },
+    googleId: { type: String, default: null },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

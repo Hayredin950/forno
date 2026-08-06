@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingBag, ClipboardList, Package, TrendingUp } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { dashboardApi, orderApi } from '@/services/mockApi'; // Keep using mockApi for dashboard and orders for now
-import { inventoryApi } from '@/services/api';
+import { dashboardApi, inventoryApi, adminOrderApi } from '@/services/api';
 import type { DashboardStats, Order, InventoryItem } from '@/types';
 
 const statusColors: Record<string, string> = {
@@ -47,7 +46,7 @@ export default function AdminDashboard() {
     const [statsRes, chartRes, ordersRes, stockRes] = await Promise.all([
       dashboardApi.getStats(),
       dashboardApi.getOrdersChart(7),
-      orderApi.getMyOrders(),
+      adminOrderApi.getAll({ page: 1, limit: 8 }),
       inventoryApi.getAll({ lowStock: true }),
     ]);
     setStats(statsRes.data);

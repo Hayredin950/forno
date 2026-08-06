@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { register, verifyEmail, login, forgotPassword, resetPassword, adminLogin } from "../controllers/auth.controller";
+import { register, verifyEmail, login, forgotPassword, resetPassword, adminLogin, googleLogin } from "../controllers/auth.controller";
 import { validate } from "../middleware/validate";
 import { authLimiter } from "../middleware/rateLimiter";
 
@@ -45,6 +45,8 @@ router.post(
   validate,
   resetPassword,
 );
+
+router.post("/google", googleLogin);
 
 router.post(
   "/admin/login",

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Minus, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, AlertTriangle, Trash2, PackagePlus } from 'lucide-react';
 import { inventoryApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { InventoryItem } from '@/types';
@@ -11,6 +11,9 @@ export default function AdminInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [activeCategory, setActiveCategory] = useState('All');
   const [updateModal, setUpdateModal] = useState<{ item: InventoryItem; stock: number; threshold: number } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newItem, setNewItem] = useState({ type: 'vegetable' as string, name: '', unit: 'portions', price: 0, currentStock: 20, maxCapacity: 50, lowStockThreshold: 10 });
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
 
   useEffect(() => { loadItems(); }, [activeCategory]);
@@ -33,10 +36,49 @@ export default function AdminInventory() {
     toast('Stock updated successfully');
   };
 
+  const handleCreate = async () => {
+    if (!newItem.name.trim()) { toast('Please enter a name', 'warning'); return; }
+    setSaving(true);
+    try {
+      const res = await inventoryApi.create(newItem);
+      if (res.success) {
+        toast('Ingredient added to inventory');
+        setCreateOpen(false);
+        setNewItem({ type: 'vegetable', name: '', unit: 'portions', price: 0, currentStock: 20, maxCapacity: 50, lowStockThreshold: 10 });
+        loadItems();
+      } else {
+        toast(res.message || 'Failed to add ingredient', 'error');
+      }
+    } catch {
+      toast('Something went wrong', 'error');
+    }
+    setSaving(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this ingredient from inventory?')) return;
+    try {
+      const res = await inventoryApi.remove(id);
+      toast(res.message || 'Ingredient deleted');
+      loadItems();
+    } catch {
+      toast('Something went wrong', 'error');
+    }
+  };
+
   const filteredItems = items;
 
   return (
     <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-semibold text-forno-text-primary">Inventory Management</h2>
+        <button onClick={() => setCreateOpen(true)} className="flex items-center gap-2 px-4 py-2 accent-gradient text-white rounded-button hover:brightness-110 transition-all">
+          <PackagePlus size={16} />
+          Add Ingredient
+        </button>
+      </div>
+
       {/* Category Filters */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
         {categories.map(c => (
@@ -112,11 +154,78 @@ export default function AdminInventory() {
                   className="ml-2 px-3 py-2 text-xs text-forno-text-secondary border border-forno-border rounded-lg hover:text-forno-text-primary hover:border-[#FF6B35]/30 transition-all">
                   Update
                 </button>
+                <button onClick={() => handleDelete(item._id)} title="Delete ingredient"
+                  className="p-2 rounded-lg border border-forno-border text-forno-text-muted hover:text-red-500 hover:border-red-500/30 transition-all">
+                  <Trash2 size={14} />
+                </button>
               </div>
             </motion.div>
           );
         })}
       </div>
+
+      {/* Create Ingredient Modal */}
+      <AnimatePresence>
+        {createOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card-elevated p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold text-forno-text-primary mb-4">Add New Ingredient</h3>
+              <div className="space-y-3 mb-6">
+                <div>
+                  <label className="block text-xs text-forno-text-muted mb-1">Type</label>
+                  <select value={newItem.type} onChange={e => setNewItem(p => ({ ...p, type: e.target.value }))}
+                    className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50">
+                    <option value="base">Base</option>
+                    <option value="sauce">Sauce</option>
+                    <option value="cheese">Cheese</option>
+                    <option value="vegetable">Vegetable</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-forno-text-muted mb-1">Name</label>
+                  <input type="text" value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
+                    className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" placeholder="e.g. Bacon Bits" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-forno-text-muted mb-1">Unit</label>
+                    <input type="text" value={newItem.unit} onChange={e => setNewItem(p => ({ ...p, unit: e.target.value }))}
+                      className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" placeholder="portions" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-forno-text-muted mb-1">Price (₹)</label>
+                    <input type="number" value={newItem.price} onChange={e => setNewItem(p => ({ ...p, price: Number(e.target.value) }))}
+                      className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-forno-text-muted mb-1">Stock</label>
+                    <input type="number" value={newItem.currentStock} onChange={e => setNewItem(p => ({ ...p, currentStock: Number(e.target.value) }))}
+                      className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-forno-text-muted mb-1">Max</label>
+                    <input type="number" value={newItem.maxCapacity} onChange={e => setNewItem(p => ({ ...p, maxCapacity: Number(e.target.value) }))}
+                      className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-forno-text-muted mb-1">Alert at</label>
+                    <input type="number" value={newItem.lowStockThreshold} onChange={e => setNewItem(p => ({ ...p, lowStockThreshold: Number(e.target.value) }))}
+                      className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-2.5 text-forno-text-primary text-sm focus:outline-none focus:border-[#FF6B35]/50" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setCreateOpen(false)} className="flex-1 py-2.5 text-sm text-forno-text-secondary border border-forno-border rounded-button hover:text-forno-text-primary transition-all">Cancel</button>
+                <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 text-sm font-medium accent-gradient text-white rounded-button hover:brightness-110 transition-all disabled:opacity-60">
+                  {saving ? 'Adding...' : 'Add Ingredient'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Update Modal */}
       <AnimatePresence>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, MoreHorizontal, ChevronLeft, ChevronRight } from 'lucide-react';
-import { adminOrderApi } from '@/services/mockApi'; // Keep using mockApi for admin orders for now
+import { adminOrderApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { Order, OrderStatus } from '@/types';
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { dashboardApi } from '@/services/mockApi'; // Keep using mockApi for dashboard analytics for now
+import { dashboardApi } from '@/services/api';
 
 const PIE_COLORS = ['#F7931E', '#FF6B35', '#7CB342', '#4CAF50', '#E53935'];
 

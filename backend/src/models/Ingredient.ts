@@ -12,6 +12,7 @@ export interface IIngredient extends Document {
   isAvailable: boolean;
   lastRestockedAt: Date | null;
   lastAlertSentAt: Date | null;
+  lastAlertLevel: number | null;
 }
 
 const ingredientSchema = new Schema<IIngredient>(
@@ -27,6 +28,7 @@ const ingredientSchema = new Schema<IIngredient>(
     isAvailable: { type: Boolean, default: true },
     lastRestockedAt: { type: Date, default: null },
     lastAlertSentAt: { type: Date, default: null },
+    lastAlertLevel: { type: Number, default: null },
   },
   { timestamps: true },
 );

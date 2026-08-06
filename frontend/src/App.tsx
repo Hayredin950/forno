@@ -21,6 +21,9 @@ import AdminInventory from '@/pages/admin/AdminInventory';
 import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminPizzas from '@/pages/admin/AdminPizzas';
+import AdminUsers from '@/pages/admin/AdminUsers';
+import VerifyEmailPage from '@/pages/auth/VerifyEmailPage';
+import ResetPasswordPage from '@/pages/auth/ResetPasswordPage';
 import PizzaDetailPage from '@/pages/user/PizzaDetailPage';
 import { Toaster } from '@/components/shared/Toaster';
 
@@ -59,6 +62,8 @@ export default function App() {
           <Route path="/login" element={<PublicLayout><LoginPage /></PublicLayout>} />
           <Route path="/register" element={<PublicLayout><RegisterPage /></PublicLayout>} />
           <Route path="/forgot-password" element={<PublicLayout><ForgotPasswordPage /></PublicLayout>} />
+          <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
           {/* User dashboard routes */}
           <Route path="/dashboard" element={<PrivateRoute><UserLayout /></PrivateRoute>}>
@@ -78,6 +83,7 @@ export default function App() {
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="users" element={<AdminUsers />} />
           </Route>
 
           {/* Fallback */}

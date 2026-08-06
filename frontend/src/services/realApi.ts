@@ -268,6 +268,28 @@ export const authApi = {
     }
   },
 
+  async googleLogin(idToken: string): Promise<{ success: boolean; message: string; data?: { token: string; user: User } }> {
+    try {
+      const res = await apiFetch('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ idToken }),
+      });
+      const payload = res.data as { token: string; user: { id?: string; _id?: string; name: string; email: string } };
+      const user: User = {
+        _id: payload.user.id ?? payload.user._id ?? '',
+        fullName: payload.user.name,
+        email: payload.user.email,
+        isVerified: true,
+        addresses: [],
+      };
+      localStorage.setItem(TOKEN_KEY, payload.token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      return { success: true, message: 'Google login successful', data: { token: payload.token, user } };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
   async adminLogin(data: { email: string; password: string }): Promise<{ success: boolean; message: string; data?: { token: string; admin: Admin } }> {
     try {
       const res = await apiFetch('/auth/admin/login', {
@@ -437,6 +459,27 @@ export const inventoryApi = {
       body: JSON.stringify({ action, amount: Math.abs(amount) }),
     });
     return { success: true, data: { item: mapIngredient(res.data) } };
+  },
+
+  async create(data: { type: string; name: string; unit: string; price?: number; currentStock?: number; maxCapacity?: number; lowStockThreshold?: number }): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await adminFetch('/admin/inventory', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      return { success: true, message: res.message };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
+  async remove(id: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await adminFetch(`/admin/inventory/${id}`, { method: 'DELETE' });
+      return { success: true, message: res.message };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
   },
 };
 
@@ -611,14 +654,16 @@ export const adminOrderApi = {
 export const dashboardApi = {
   async getStats(): Promise<{ success: boolean; data: DashboardStats }> {
     try {
-      const [allRes, pendingRes, lowStockRes] = await Promise.all([
+      const [allRes, pendingRes, lowStockRes, revRes] = await Promise.all([
         adminFetch('/admin/orders?limit=1'),
         adminFetch('/admin/orders?status=Order%20Received&limit=1'),
         adminFetch('/admin/inventory'),
+        adminFetch('/admin/analytics/revenue-today'),
       ]);
 
       const allData = allRes.data as { total?: number };
       const pendingData = pendingRes.data as { total?: number };
+      const revenueToday = (revRes.data as { revenue?: number }).revenue ?? 0;
       const inventory = Array.isArray(lowStockRes.data) ? (lowStockRes.data as unknown[]).map(mapIngredient) : [];
       const lowStockItems = inventory.filter(i => i.currentStock < i.threshold).length;
 
@@ -628,7 +673,7 @@ export const dashboardApi = {
           totalOrders: allData.total ?? 0,
           pendingOrders: pendingData.total ?? 0,
           lowStockItems,
-          revenueToday: 0,
+          revenueToday,
           changes: { totalOrders: '+0%', pendingOrders: '+0%', lowStockItems: `${lowStockItems}`, revenueToday: '+0%' },
         },
       };
@@ -640,51 +685,123 @@ export const dashboardApi = {
     }
   },
 
-  async getOrdersChart(_days: number = 7): Promise<{ success: boolean; data: ChartData }> {
-    return { success: true, data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], data: [45, 62, 38, 71, 55, 89, 67] } };
+  async getOrdersChart(days: number = 7): Promise<{ success: boolean; data: ChartData }> {
+    try {
+      const res = await adminFetch(`/admin/analytics/orders?days=${days}`);
+      const d = res.data as ChartData;
+      return { success: true, data: { labels: d.labels, data: d.data } };
+    } catch {
+      return { success: true, data: { labels: [], data: [] } };
+    }
   },
 
-  async getRevenueChart(_days: number = 7): Promise<{ success: boolean; data: ChartData }> {
-    return { success: true, data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], data: [3200, 4500, 2800, 5100, 3900, 6200, 4800] } };
+  async getRevenueChart(days: number = 7): Promise<{ success: boolean; data: ChartData }> {
+    try {
+      const res = await adminFetch(`/admin/analytics/revenue?days=${days}`);
+      const d = res.data as ChartData;
+      return { success: true, data: { labels: d.labels, data: d.data } };
+    } catch {
+      return { success: true, data: { labels: [], data: [] } };
+    }
   },
 
   async getPopularPizzas(): Promise<{ success: boolean; data: { name: string; count: number }[] }> {
-    return {
-      success: true,
-      data: [
-        { name: 'Margherita', count: 342 }, { name: 'Pepperoni', count: 287 },
-        { name: 'BBQ Chicken', count: 198 }, { name: 'Veggie Supreme', count: 156 },
-        { name: 'Four Cheese', count: 134 }, { name: 'Truffle Mushroom', count: 89 },
-      ],
-    };
+    try {
+      const res = await adminFetch('/admin/analytics/popular');
+      const data = (res.data as { name: string; count: number }[]) ?? [];
+      return { success: true, data };
+    } catch {
+      return { success: true, data: [] };
+    }
   },
 
   async getStatusDistribution(): Promise<{ success: boolean; data: { name: string; value: number }[] }> {
     try {
-      const [r, k, d, c] = await Promise.all([
-        adminFetch('/admin/orders?status=Order%20Received&limit=1'),
-        adminFetch('/admin/orders?status=In%20Kitchen&limit=1'),
-        adminFetch('/admin/orders?status=Sent%20to%20Delivery&limit=1'),
-        adminFetch('/admin/orders?status=Delivered&limit=1'),
-      ]);
-      return {
-        success: true,
-        data: [
-          { name: 'Received', value: (r.data as { total?: number }).total ?? 0 },
-          { name: 'Kitchen', value: (k.data as { total?: number }).total ?? 0 },
-          { name: 'Delivery', value: (d.data as { total?: number }).total ?? 0 },
-          { name: 'Completed', value: (c.data as { total?: number }).total ?? 0 },
-        ],
-      };
+      const res = await adminFetch('/admin/analytics/status');
+      const data = (res.data as { name: string; value: number }[]) ?? [];
+      return { success: true, data };
     } catch {
-      return { success: true, data: [{ name: 'Received', value: 0 }, { name: 'Kitchen', value: 0 }, { name: 'Delivery', value: 0 }, { name: 'Completed', value: 0 }] };
+      return { success: true, data: [] };
     }
   },
 
   async getHourlyOrders(): Promise<{ success: boolean; data: ChartData }> {
-    return {
-      success: true,
-      data: { labels: ['11AM', '12PM', '1PM', '2PM', '3PM', '4PM', '5PM', '6PM', '7PM', '8PM', '9PM', '10PM'], data: [12, 28, 45, 38, 22, 18, 35, 52, 48, 30, 15, 8] },
-    };
+    try {
+      const res = await adminFetch('/admin/analytics/hourly');
+      const d = res.data as ChartData;
+      return { success: true, data: { labels: d.labels, data: d.data } };
+    } catch {
+      return { success: true, data: { labels: [], data: [] } };
+    }
+  },
+};
+
+// ─── Admin Users ───────────────────────────────────────────────────────────
+
+export const adminUserApi = {
+  async getAll(params: { search?: string; page?: number; limit?: number } = {}): Promise<{ success: boolean; data: { users: { _id: string; name: string; email: string; isVerified: boolean; isActive: boolean; googleId: string | null; createdAt: string }[]; total: number; page: number; pages: number } }> {
+    const q = new URLSearchParams();
+    if (params.search) q.set('search', params.search);
+    if (params.page) q.set('page', String(params.page));
+    if (params.limit) q.set('limit', String(params.limit));
+    const res = await adminFetch(`/admin/users${q.toString() ? `?${q}` : ''}`);
+    const d = res.data as { users: unknown[]; total: number; page: number; pages: number };
+    const users = (d.users ?? []).map((u: any) => ({
+      _id: String(u._id),
+      name: u.name,
+      email: u.email,
+      isVerified: u.isVerified ?? false,
+      isActive: u.isActive ?? true,
+      googleId: u.googleId ?? null,
+      createdAt: u.createdAt,
+    }));
+    return { success: true, data: { users, total: d.total ?? users.length, page: d.page ?? 1, pages: d.pages ?? 1 } };
+  },
+
+  async toggleActive(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await adminFetch(`/admin/users/${id}/toggle`, { method: 'PATCH' });
+    return { success: true, message: res.message ?? 'User updated' };
+  },
+
+  async remove(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await adminFetch(`/admin/users/${id}`, { method: 'DELETE' });
+    return { success: true, message: res.message ?? 'User deleted' };
+  },
+};
+
+// ─── Forgot / Reset password ───────────────────────────────────────────────
+
+export const passwordApi = {
+  async forgot(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await apiFetch('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return { success: true, message: res.message ?? 'If that email is registered, a reset link has been sent.' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
+  async reset(token: string, password: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await apiFetch(`/auth/reset-password/${token}`, {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      return { success: true, message: res.message ?? 'Password reset successfully' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
+  async verifyEmail(token: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await apiFetch(`/auth/verify-email/${token}`);
+      return { success: true, message: res.message ?? 'Email verified successfully' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
   },
 };

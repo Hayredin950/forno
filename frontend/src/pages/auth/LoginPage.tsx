@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Flame } from 'lucide-react';
 import { authApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
+import GoogleSignInButton from '@/components/shared/GoogleSignInButton';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -89,6 +90,14 @@ export default function LoginPage() {
                   className="w-full py-3.5 accent-gradient rounded-button text-white font-semibold hover:brightness-110 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
                   {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Sign In'}
                 </button>
+
+                <div className="flex items-center gap-3 my-5">
+                  <div className="flex-1 h-px bg-forno-border" />
+                  <span className="text-xs text-forno-text-muted">or</span>
+                  <div className="flex-1 h-px bg-forno-border" />
+                </div>
+
+                <GoogleSignInButton />
 
                 <p className="text-center text-sm text-forno-text-secondary mt-6">
                   Don't have an account? <Link to="/register" className="text-[#FF6B35] hover:underline">Sign Up</Link>

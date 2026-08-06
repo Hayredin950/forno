@@ -65,6 +65,52 @@ export const updateThreshold = asyncHandler(async (req: Request, res: Response, 
   sendSuccess(res, ingredient, "Threshold updated");
 });
 
+export const createIngredient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { type, name, unit, price, currentStock, maxCapacity, lowStockThreshold, image } = req.body as {
+    type: "base" | "sauce" | "cheese" | "vegetable";
+    name: string;
+    unit: string;
+    price?: number;
+    currentStock?: number;
+    maxCapacity?: number;
+    lowStockThreshold?: number;
+    image?: string;
+  };
+
+  if (!["base", "sauce", "cheese", "vegetable"].includes(type)) {
+    return next(new ApiError(400, "type must be base, sauce, cheese, or vegetable"));
+  }
+  if (!name?.trim() || !unit?.trim()) {
+    return next(new ApiError(400, "name and unit are required"));
+  }
+
+  const existing = await Ingredient.findOne({ name: name.trim() });
+  if (existing) return next(new ApiError(409, "An ingredient with this name already exists"));
+
+  const ingredient = await Ingredient.create({
+    type,
+    name: name.trim(),
+    unit,
+    price: price ?? 0,
+    currentStock: currentStock ?? 0,
+    maxCapacity: maxCapacity ?? 50,
+    lowStockThreshold: lowStockThreshold ?? 10,
+    image: image ?? "",
+    isAvailable: (currentStock ?? 0) > 0,
+  });
+
+  sendSuccess(res, ingredient, "Ingredient created", 201);
+});
+
+export const deleteIngredient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params as { id: string };
+  const ingredient = await Ingredient.findByIdAndDelete(id);
+  if (!ingredient) return next(new ApiError(404, "Ingredient not found"));
+
+  await StockLog.deleteMany({ ingredient: id });
+  sendSuccess(res, {}, "Ingredient deleted");
+});
+
 export const adjustStock = asyncHandler(async (req: AuthAdminRequest, res: Response, next: NextFunction) => {
   const { id } = req.params as { id: string };
   const { amount } = req.body as { amount: number };

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { User } from "../models/User";
 import { Admin } from "../models/Admin";
 import { generateUserToken, generateAdminToken } from "../utils/generateToken";
+import { logger } from "../lib/logger";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service";
 import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
@@ -60,6 +61,7 @@ export const login = asyncHandler(async (req: Request, res: Response, next: Next
   if (!match) return next(new ApiError(401, "Invalid email or password"));
 
   if (!user.isVerified) return next(new ApiError(403, "Please verify your email before logging in"));
+  if (user.isActive === false) return next(new ApiError(403, "Your account has been deactivated. Contact support."));
 
   const token = generateUserToken(String(user._id));
   sendSuccess(res, { token, user: { id: user._id, name: user.name, email: user.email } }, "Login successful");
@@ -96,6 +98,52 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response, ne
   await user.save();
 
   sendSuccess(res, null, "Password reset successfully. You can now log in.");
+});
+
+export const googleLogin = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { idToken } = req.body as { idToken: string };
+  if (!idToken) return next(new ApiError(400, "idToken is required"));
+
+  const clientId = process.env["GOOGLE_CLIENT_ID"];
+  if (!clientId) return next(new ApiError(503, "Google sign-in is not configured on this server"));
+
+  try {
+    const { OAuth2Client } = await import("google-auth-library");
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({ idToken, audience: clientId });
+    const payload = ticket.getPayload();
+    if (!payload?.email) return next(new ApiError(401, "Invalid Google token"));
+
+    const email = payload.email.toLowerCase();
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Auto-create an account for first-time Google sign-ins
+      user = await User.create({
+        name: payload.name || email.split("@")[0],
+        email,
+        password: crypto.randomBytes(32).toString("hex"), // random, unusable password
+        isVerified: true,
+        verificationToken: null,
+        googleId: payload.sub ?? null,
+      });
+    } else if (user.googleId && user.googleId !== payload.sub) {
+      return next(new ApiError(409, "This email is already linked to another account"));
+    } else {
+      // Update googleId if this is the first Google sign-in for an existing user
+      if (!user.googleId) {
+        user.googleId = payload.sub ?? null;
+        user.isVerified = true;
+        await user.save();
+      }
+    }
+
+    const token = generateUserToken(String(user._id));
+    sendSuccess(res, { token, user: { id: user._id, name: user.name, email: user.email } }, "Google login successful");
+  } catch (err) {
+    logger.error({ err }, "Google token verification failed");
+    return next(new ApiError(401, "Invalid Google token"));
+  }
 });
 
 export const adminLogin = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
