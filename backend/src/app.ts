@@ -1,11 +1,11 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import mongoSanitize from "express-mongo-sanitize";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { errorHandler } from "./middleware/errorHandler";
+import { sanitizeMongo } from "./middleware/sanitize";
 
 const app: Express = express();
 
@@ -55,7 +55,9 @@ app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // Strip MongoDB query operators ($gt, $regex, $where …) from all bodies and
 // query strings — blocks NoSQL injection before it reaches mongoose filters.
-app.use(mongoSanitize());
+// (Custom middleware: express-mongo-sanitize's default reassigns req.query,
+// which is getter-only in Express 5 — see middleware/sanitize.ts.)
+app.use(sanitizeMongo);
 
 app.use("/api", router);
 

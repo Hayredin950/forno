@@ -4,6 +4,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { connectDB } from "./config/db";
 import { startCronJobs } from "./services/cron.service";
+import { autoSeedIfEmpty } from "./services/auto-seed.service";
 
 const rawPort = process.env["PORT"] ?? "5000";
 const port = Number(rawPort);
@@ -25,6 +26,9 @@ mongoose.connection.on("connected", ensureCronStarted);
 const bootstrap = async (): Promise<void> => {
   await connectDB();
   if (mongoose.connection.readyState === 1) ensureCronStarted();
+
+  // Populate a brand-new database once at boot so the app is never empty.
+  await autoSeedIfEmpty();
 
   app.listen(port, (err?: Error) => {
     if (err) {
