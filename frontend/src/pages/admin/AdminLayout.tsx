@@ -97,8 +97,26 @@ export default function AdminLayout() {
           </div>
         </header>
 
+        {/* Mobile Nav — the sidebar is hidden below lg */}
+        <nav className="lg:hidden fixed top-16 left-0 right-0 z-30 bg-forno-bg-secondary border-b border-forno-border">
+          <div className="flex gap-1 overflow-x-auto px-3 py-2">
+            {navItems.map(item => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link key={item.path} to={item.path}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                    isActive ? 'text-[#FF6B35] bg-[#FF6B35]/[0.08]' : 'text-forno-text-muted hover:text-forno-text-secondary'
+                  }`}>
+                  <item.icon size={14} strokeWidth={1.5} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
         {/* Content */}
-        <main className="pt-24 pb-8 px-6 lg:px-8">
+        <main className="pt-28 lg:pt-24 pb-8 px-6 lg:px-8">
           <Outlet />
         </main>
       </div>

@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
@@ -8,6 +8,10 @@ import { logger } from "./lib/logger";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app: Express = express();
+
+// Trust the first proxy hop (Render/NGINX) so rate-limiters and logging see
+// the real client IP instead of every user sharing the proxy's IP.
+app.set("trust proxy", 1);
 
 // Origins are normalized (lowercase, no trailing slash) so values like
 // "https://forno-ten.vercel.app/" still match the browser Origin header
@@ -23,7 +27,8 @@ app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin || allowedOrigins.includes(normalize(origin))) return cb(null, true);
-      cb(new Error(`CORS policy: origin ${origin} not allowed`));
+      // A disallowed origin should be a 403, not a 500.
+      cb(null, false);
     },
     credentials: true,
   }),
@@ -45,10 +50,19 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "10kb" }));
-app.use(express.urlencoded({ extended: true, limit: "10kb" }));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+
+// Strip MongoDB query operators ($gt, $regex, $where …) from all bodies and
+// query strings — blocks NoSQL injection before it reaches mongoose filters.
+app.use(mongoSanitize());
 
 app.use("/api", router);
+
+// JSON 404 for unknown API routes (keeps the JSON contract).
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: "Route not found" });
+});
 
 app.use(errorHandler);
 

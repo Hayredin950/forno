@@ -25,9 +25,15 @@ const emptySeries = (days: number): { labels: string[]; data: number[] } => {
 
 // ─── Endpoints ─────────────────────────────────────────────────────────────
 
+/** Safely parse and clamp the `days` query param (default 7). */
+const parseDays = (raw: unknown): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.min(90, Math.max(1, Math.trunc(n))) : 7;
+};
+
 /** Orders per day for the last N days. */
 export const getOrdersSeries = asyncHandler(async (req: Request, res: Response) => {
-  const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
+  const days = parseDays(req.query.days);
   const since = new Date(Date.now() - (days - 1) * DAY_MS);
   since.setHours(0, 0, 0, 0);
 
@@ -50,7 +56,7 @@ export const getOrdersSeries = asyncHandler(async (req: Request, res: Response) 
 
 /** Revenue (paid orders only) per day for the last N days. */
 export const getRevenueSeries = asyncHandler(async (req: Request, res: Response) => {
-  const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
+  const days = parseDays(req.query.days);
   const since = new Date(Date.now() - (days - 1) * DAY_MS);
   since.setHours(0, 0, 0, 0);
 

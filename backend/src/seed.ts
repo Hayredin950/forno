@@ -65,6 +65,11 @@ const pizzas = [
 ];
 
 async function seed(): Promise<void> {
+  // Never clobber a live database: the seed wipes pizzas/ingredients/admins.
+  if (process.env["NODE_ENV"] === "production" && process.env["FORCE_SEED"] !== "true") {
+    throw new Error("Refusing to seed in production. Set FORCE_SEED=true to override.");
+  }
+
   await mongoose.connect(MONGO_URI);
   console.log("Connected to MongoDB");
 
@@ -72,9 +77,10 @@ async function seed(): Promise<void> {
   await Ingredient.deleteMany({});
   await Pizza.deleteMany({});
 
-  const adminPassword = await bcrypt.hash("Admin@123", 12);
-  await Admin.create({ name: "Forno Admin", email: "admin@forno.com", password: adminPassword });
-  console.log("Admin seeded — email: admin@forno.com / password: Admin@123");
+  const adminPassword = process.env["ADMIN_PASSWORD"] ?? "Admin@123";
+  const hashed = await bcrypt.hash(adminPassword, 12);
+  await Admin.create({ name: "Forno Admin", email: "admin@forno.com", password: hashed });
+  console.log(`Admin seeded — email: admin@forno.com / password: ${process.env["ADMIN_PASSWORD"] ? "from ADMIN_PASSWORD env" : "Admin@123"}`);
 
   await Ingredient.insertMany(ingredients);
   console.log(`${ingredients.length} ingredients seeded`);

@@ -5,7 +5,7 @@ import { ChevronDown, Pointer, Layers, Flame, Bike } from 'lucide-react';
 import { pizzaApi } from '@/services/api';
 import type { Pizza } from '@/types';
 
-function CountUp({ target, suffix = '', duration = 1500 }: { target: number; suffix?: string; duration?: number }) {
+function CountUp({ target, decimals = 0, suffix = '', duration = 1500 }: { target: number; decimals?: number; suffix?: string; duration?: number }) {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true });
@@ -17,13 +17,18 @@ function CountUp({ target, suffix = '', duration = 1500 }: { target: number; suf
       const elapsed = Date.now() - start;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.round(target * eased));
+      setCount(target * eased);
       if (progress < 1) requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
   }, [isInView, target, duration]);
 
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
+  return (
+    <span ref={ref}>
+      {count.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+      {suffix}
+    </span>
+  );
 }
 
 const steps = [
@@ -238,8 +243,7 @@ export default function LandingPage() {
                 className="text-center"
               >
                 <div className="text-4xl lg:text-5xl font-semibold mb-2" style={{ background: 'linear-gradient(135deg, #FF6B35, #F7931E)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  {stat.isDecimal ? <CountUp target={stat.value * 10} suffix="" duration={1500} /> : <CountUp target={stat.value} suffix={stat.suffix} />}
-                  {stat.isDecimal && <span>.9</span>}
+                  {stat.isDecimal ? <CountUp target={stat.value} decimals={1} suffix="" duration={1500} /> : <CountUp target={stat.value} suffix={stat.suffix} />}
                 </div>
                 <p className="text-xs uppercase tracking-[0.08em] text-forno-text-muted">{stat.label}</p>
               </motion.div>

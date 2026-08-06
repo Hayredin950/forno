@@ -9,7 +9,7 @@ const TOKEN_KEY = 'forno_token';
 const ADMIN_TOKEN_KEY = 'forno_admin_token';
 const USER_KEY = 'forno_user';
 const ADMIN_KEY = 'forno_admin_user';
-const CART_KEY = 'forno_cart';
+const CART_KEY = 'forno_cart_v2';
 
 const getToken = () => localStorage.getItem(TOKEN_KEY);
 const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -19,24 +19,37 @@ const getAdminToken = () => localStorage.getItem(ADMIN_TOKEN_KEY);
 async function apiFetch(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...((options.headers as Record<string, string>) ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...(options.headers as Record<string, string>) },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { message?: string }).message ?? 'Request failed');
+  if (!res.ok) {
+    // Expired/invalid token — drop session state and send the user to the
+    // right login page instead of leaving them on a broken authenticated page.
+    if (res.status === 401 && (options.headers as Record<string, string>)?.Authorization) {
+      const wasAdmin = !!localStorage.getItem(ADMIN_TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      localStorage.removeItem(ADMIN_KEY);
+      window.location.href = path.startsWith('/admin') || wasAdmin ? '/admin/login' : '/login';
+      throw new Error('Session expired. Please sign in again.');
+    }
+    throw new Error((data as { message?: string }).message ?? 'Request failed');
+  }
   return data as { success: boolean; data: unknown; message?: string };
 }
 
 async function authFetch(path: string, options: RequestInit = {}) {
   return apiFetch(path, {
     ...options,
-    headers: { ...((options.headers as Record<string, string>) ?? {}), Authorization: `Bearer ${getToken()}` },
+    headers: { ...(options.headers as Record<string, string>), Authorization: `Bearer ${getToken()}` },
   });
 }
 
 async function adminFetch(path: string, options: RequestInit = {}) {
   return apiFetch(path, {
     ...options,
-    headers: { ...((options.headers as Record<string, string>) ?? {}), Authorization: `Bearer ${getAdminToken()}` },
+    headers: { ...(options.headers as Record<string, string>), Authorization: `Bearer ${getAdminToken()}` },
   });
 }
 
@@ -47,7 +60,7 @@ const STATUS_FE_TO_BE: Record<string, string> = {
   kitchen: 'In Kitchen',
   delivery: 'Sent to Delivery',
   completed: 'Delivered',
-  cancelled: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
 const STATUS_BE_TO_FE: Record<string, OrderStatus> = {
@@ -55,6 +68,7 @@ const STATUS_BE_TO_FE: Record<string, OrderStatus> = {
   'In Kitchen': 'kitchen',
   'Sent to Delivery': 'delivery',
   'Delivered': 'completed',
+  'Cancelled': 'cancelled',
 };
 
 // ─── Data mappers ─────────────────────────────────────────────────────────
@@ -79,7 +93,7 @@ function mapPizza(p: any): Pizza {
     price: p.price ?? p.basePrice,
     category: p.category,
     tags: p.tags ?? [],
-    imageUrl: p.image ?? getPizzaImage(p.name),
+    imageUrl: p.imageUrl ?? p.image ?? getPizzaImage(p.name),
     ingredients: p.ingredients ?? [],
     isAvailable: p.isAvailable ?? true,
     orderCount: p.orderCount ?? 0,
@@ -94,16 +108,17 @@ function mapIngredient(ing: any): InventoryItem {
     cheese: 'cheese',
     vegetable: 'veggies',
   };
+  const stock = ing.currentStock ?? 0;
   return {
     _id: String(ing._id),
     name: ing.name,
     category: catMap[ing.type as string] ?? 'veggies',
-    currentStock: ing.currentStock ?? 0,
-    maxCapacity: Math.max((ing.currentStock ?? 0) * 2, 100),
+    currentStock: stock,
+    maxCapacity: ing.maxCapacity ?? Math.max(stock, 50),
     threshold: ing.lowStockThreshold ?? 10,
     unitPrice: ing.price ?? 0,
-    isAvailable: (ing.currentStock ?? 0) > 0,
-    imageUrl: ing.image ?? undefined,
+    isAvailable: ing.isAvailable ?? stock > 0,
+    imageUrl: ing.imageUrl ?? ing.image ?? undefined,
   };
 }
 
@@ -139,15 +154,19 @@ function mapOrder(o: any): Order {
   });
 
   const total = o.totalAmount ?? 0;
-  const tax = Math.round(total * 0.05 * 100) / 100;
-  const deliveryFee = total >= 500 ? 0 : 40;
-  const subtotal = Math.round((total - tax - deliveryFee) * 100) / 100;
+  const tax = o.tax ?? Math.round(total * 0.05 * 100) / 100;
+  const deliveryFee = o.deliveryFee ?? (total >= 500 ? 0 : 40);
+  const subtotal = o.subtotal ?? Math.round((total - tax - deliveryFee) * 100) / 100;
   const feStatus = STATUS_BE_TO_FE[o.orderStatus as string] ?? 'received';
 
   const user = o.user;
   const userName = user?.name ?? '';
   const userEmail = user?.email ?? '';
   const userId = user?._id ? String(user._id) : typeof user === 'string' ? user : '';
+
+  const rawHistory = Array.isArray(o.statusHistory) && o.statusHistory.length > 0
+    ? o.statusHistory
+    : [{ status: o.orderStatus ?? 'Order Received', timestamp: o.statusUpdatedAt ?? o.createdAt }];
 
   return {
     _id: idStr,
@@ -159,20 +178,23 @@ function mapOrder(o: any): Order {
     deliveryFee,
     total,
     status: feStatus,
-    statusHistory: [{ status: feStatus, timestamp: o.statusUpdatedAt ?? o.createdAt, updatedBy: 'system' }],
+    statusHistory: rawHistory.map((h: any) => ({
+      status: STATUS_BE_TO_FE[h.status] ?? h.status,
+      timestamp: h.timestamp ?? o.createdAt ?? new Date().toISOString(),
+      updatedBy: h.updatedBy ?? 'system',
+    })),
     payment: {
-      status: o.paymentStatus === 'paid' ? 'completed' : o.paymentStatus === 'failed' ? 'failed' : 'pending',
+      status: o.paymentStatus === 'paid' ? 'completed' : o.paymentStatus === 'failed' ? 'failed' : o.paymentStatus === 'refunded' ? 'failed' : 'pending',
       amount: total,
     },
     deliveryAddress: o.deliveryAddress ?? { street: '', city: '', state: '', pincode: '' },
-    // o.createdAt can be missing on partial/minimal API responses — guard
-    // against `new Date(undefined)` producing an Invalid Date, which throws
-    // a RangeError from .toISOString() and used to blank the whole page.
-    estimatedTime: (() => {
-      const base = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
-      const from = Number.isNaN(base) ? Date.now() : base;
-      return new Date(from + 30 * 60000).toISOString();
-    })(),
+    estimatedTime: o.estimatedTime
+      ? new Date(o.estimatedTime).toISOString()
+      : (() => {
+        const base = o.createdAt ? new Date(o.createdAt).getTime() : NaN;
+        const from = Number.isNaN(base) ? Date.now() : base;
+        return new Date(from + 30 * 60000).toISOString();
+      })(),
     createdAt: o.createdAt ?? new Date().toISOString(),
     updatedAt: o.updatedAt ?? o.createdAt ?? new Date().toISOString(),
     userName,
@@ -568,7 +590,7 @@ export const orderApi = {
 
     const res = await authFetch('/orders', {
       method: 'POST',
-      body: JSON.stringify({ items: backendItems }),
+      body: JSON.stringify({ items: backendItems, deliveryAddress: data.deliveryAddress }),
     });
     return { success: true, data: { order: mapOrder(res.data) } };
   },

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { authApi } from '@/services/api';
-import { useToast } from '@/components/shared/Toaster';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { authApi } from "@/services/api";
+import { useToast } from "@/components/shared/Toaster";
 
 declare global {
   interface Window {
@@ -17,7 +17,7 @@ declare global {
   }
 }
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 export default function GoogleSignInButton() {
   const [loading, setLoading] = useState(false);
@@ -29,90 +29,69 @@ export default function GoogleSignInButton() {
     try {
       const res = await authApi.googleLogin(credential);
       if (res.success) {
-        toast('Signed in with Google!');
-        navigate('/dashboard');
+        toast("Signed in with Google!");
+        navigate("/dashboard");
       } else {
-        toast(res.message || 'Google sign-in failed', 'error');
+        toast(res.message || "Google sign-in failed", "error");
       }
     } catch {
-      toast('Something went wrong', 'error');
+      toast("Something went wrong", "error");
     }
     setLoading(false);
   };
 
-  const handleClick = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      toast('Google sign-in is not configured yet. Contact the admin.', 'error');
-      return;
-    }
-    if (loading) return;
-    // Use the GIS popup flow via the button element already rendered by
-    // initialize/renderButton — fall back to a manual ID token fetch.
-    const google = window.google;
-    if (google?.accounts?.id) {
-      // google.accounts.id already rendered a button into this ref below;
-      // clicking here triggers that button's popup. To keep it simple we
-      // directly prompt for a credential.
-      google.accounts.id.prompt?.();
-    }
+  // Load the GIS script once and render the official (clickable) button into
+  // a visible container — the real Google button opens its own popup, which a
+  // bare prompt() call often gets suppressed as One Tap.
+  const renderOfficial = (el: HTMLDivElement | null) => {
+    if (!el || el.dataset.gsiMounted === "1") return;
+    el.dataset.gsiMounted = "1";
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = () => {
+      const google = window.google;
+      if (google?.accounts?.id) {
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (resp: { credential?: string }) => {
+            if (resp.credential) handleCredential(resp.credential);
+          },
+        });
+        google.accounts.id.renderButton(el, {
+          theme: "outline",
+          size: "large",
+          width: "100%",
+          text: "continue_with",
+        });
+      }
+    };
+    document.head.appendChild(script);
   };
 
-  // Simple approach: load the GIS script on mount and render the official
-  // Google button, which returns a credential we send to our backend.
-  const [btnRef, setBtnRef] = useState<HTMLDivElement | null>(null);
+  if (!GOOGLE_CLIENT_ID) {
+    return (
+      <button
+        disabled
+        className="w-full py-3 border border-forno-border rounded-button text-sm font-medium text-forno-text-muted flex items-center justify-center gap-3 cursor-not-allowed"
+      >
+        <GoogleIcon />
+        Google Sign-In (not configured)
+      </button>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      {!GOOGLE_CLIENT_ID ? (
-        <button
-          onClick={handleClick}
-          disabled
-          className="w-full py-3 border border-forno-border rounded-button text-sm font-medium text-forno-text-muted flex items-center justify-center gap-3 cursor-not-allowed"
-        >
-          <GoogleIcon />
-          Google Sign-In (not configured)
-        </button>
-      ) : (
-        <button
-          onClick={handleClick}
-          disabled={loading}
-          className="w-full py-3 border border-forno-border rounded-button text-sm font-medium text-forno-text-primary hover:border-[#FF6B35]/40 hover:bg-white/[0.02] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
-        >
-          <GoogleIcon />
-          {loading ? 'Signing in...' : 'Continue with Google'}
-        </button>
-      )}
-
-      {/* Hidden container where GIS renders the official button */}
+      {/* Official button is the actual interactive element — fully visible,
+          no duplicated styled clone. */}
       <div
-        ref={(el) => {
-          if (el && GOOGLE_CLIENT_ID && !btnRef) {
-            setBtnRef(el);
-            const script = document.createElement('script');
-            script.src = 'https://accounts.google.com/gsi/client';
-            script.async = true;
-            script.onload = () => {
-              const google = window.google;
-              if (google?.accounts?.id) {
-                google.accounts.id.initialize({
-                  client_id: GOOGLE_CLIENT_ID,
-                  callback: (resp: { credential?: string }) => {
-                    if (resp.credential) handleCredential(resp.credential);
-                  },
-                });
-                google.accounts.id.renderButton(el, {
-                  theme: 'outline',
-                  size: 'large',
-                  width: '100%',
-                  text: 'continue_with',
-                });
-              }
-            };
-            document.head.appendChild(script);
-          }
-        }}
-        className="hidden google-btn-container [&>div]:!w-full [&>div>div]:!w-full"
+        ref={renderOfficial}
+        className="google-btn-container [&>div]:!w-full [&>div>div]:!w-full"
       />
+      <p className="text-center text-xs text-forno-text-muted">
+        {loading ? "Signing in with Google..." : "Continue with Google accounts"}
+      </p>
     </div>
   );
 }

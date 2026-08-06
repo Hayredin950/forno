@@ -32,17 +32,21 @@ export const updateStock = asyncHandler(async (req: AuthAdminRequest, res: Respo
 
   let changeAmount = 0;
   if (action === "set") {
-    changeAmount = amount - ingredient.currentStock;
-    ingredient.currentStock = amount;
+    changeAmount = Math.min(amount, ingredient.maxCapacity) - ingredient.currentStock;
+    ingredient.currentStock = Math.min(amount, ingredient.maxCapacity);
   } else if (action === "increment") {
-    changeAmount = amount;
-    ingredient.currentStock += amount;
-    ingredient.lastRestockedAt = new Date();
+    changeAmount = Math.min(amount, ingredient.maxCapacity - ingredient.currentStock);
+    ingredient.currentStock = Math.min(
+      ingredient.maxCapacity,
+      ingredient.currentStock + amount,
+    );
+    if (changeAmount > 0) ingredient.lastRestockedAt = new Date();
   } else {
-    changeAmount = -amount;
+    changeAmount = -Math.min(amount, ingredient.currentStock);
     ingredient.currentStock = Math.max(0, ingredient.currentStock - amount);
   }
 
+  ingredient.isAvailable = ingredient.currentStock > 0;
   await ingredient.save();
 
   const reason = action === "increment" ? "restock" : "manual_update";
@@ -122,13 +126,14 @@ export const adjustStock = asyncHandler(async (req: AuthAdminRequest, res: Respo
   const ingredient = await Ingredient.findById(id);
   if (!ingredient) return next(new ApiError(404, "Ingredient not found"));
 
-  ingredient.currentStock = Math.max(0, ingredient.currentStock + amount);
+  ingredient.currentStock = Math.max(0, Math.min(ingredient.maxCapacity, ingredient.currentStock + amount));
   if (amount > 0) {
     ingredient.lastRestockedAt = new Date();
   }
+  ingredient.isAvailable = ingredient.currentStock > 0;
   await ingredient.save();
 
-  const reason = amount > 0 ? "restock" : "usage";
+  const reason = amount > 0 ? "restock" : "manual_update";
   await StockLog.create({ ingredient: id, changeAmount: amount, reason, adminId: req.adminId, timestamp: new Date() });
 
   sendSuccess(res, ingredient, "Stock adjusted");

@@ -35,17 +35,25 @@ export default function AdminDashboard() {
   const [chartData, setChartData] = useState<{ name: string; orders: number }[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
+  const [days, setDays] = useState(7);
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 15000);
+    const interval = setInterval(() => loadStats(), 15000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => { loadData(); }, [days]);
+
+  const loadStats = async () => {
+    const statsRes = await dashboardApi.getStats();
+    setStats(statsRes.data);
+  };
 
   const loadData = async () => {
     const [statsRes, chartRes, ordersRes, stockRes] = await Promise.all([
       dashboardApi.getStats(),
-      dashboardApi.getOrdersChart(7),
+      dashboardApi.getOrdersChart(days),
       adminOrderApi.getAll({ page: 1, limit: 8 }),
       inventoryApi.getAll({ lowStock: true }),
     ]);
@@ -86,8 +94,9 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-forno-text-primary">Order Volume</h3>
             <div className="flex gap-1">
-              {['7D', '30D', '90D'].map(p => (
-                <button key={p} className={`px-3 py-1 text-xs rounded-lg transition-colors ${p === '7D' ? 'bg-[#FF6B35]/15 text-[#FF6B35]' : 'text-forno-text-muted hover:text-forno-text-primary'}`}>{p}</button>
+              {[{ label: '7D', days: 7 }, { label: '30D', days: 30 }, { label: '90D', days: 90 }].map(p => (
+                <button key={p.label} onClick={() => setDays(p.days)}
+                  className={`px-3 py-1 text-xs rounded-lg transition-colors ${days === p.days ? 'bg-[#FF6B35]/15 text-[#FF6B35]' : 'text-forno-text-muted hover:text-forno-text-primary'}`}>{p.label}</button>
               ))}
             </div>
           </div>

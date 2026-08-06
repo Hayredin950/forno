@@ -5,6 +5,8 @@ import { sendSuccess } from "../utils/apiResponse";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ApiError } from "../utils/apiError";
 
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const listPizzas = asyncHandler(async (req: Request, res: Response) => {
   const { category, tag, sort, search } = req.query;
 
@@ -19,7 +21,7 @@ export const listPizzas = asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (search) {
-    const searchRegex = new RegExp(search as string, 'i');
+    const searchRegex = new RegExp(escapeRegExp(search as string), 'i');
     query.$or = [
       { name: searchRegex },
       { description: searchRegex }
@@ -132,8 +134,11 @@ export const adminListPizzas = asyncHandler(async (req: Request, res: Response) 
 export const adminCreatePizza = asyncHandler(async (req: Request, res: Response) => {
   const { name, description, price, category, tags, imageUrl, ingredients, isAvailable } = req.body;
 
-  if (!name || !price || !category) {
-    throw new ApiError(400, "Name, price, and category are required");
+  if (!name || typeof price !== "number" || price < 0 || !category) {
+    throw new ApiError(400, "Valid name, non-negative price, and category are required");
+  }
+  if (!["veg", "non-veg"].includes(category)) {
+    throw new ApiError(400, "category must be 'veg' or 'non-veg'");
   }
 
   const pizza = await Pizza.create({

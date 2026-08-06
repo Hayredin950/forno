@@ -48,7 +48,7 @@ export default function AdminPizzas() {
       setShowModal(null);
       setSelectedPizza(null);
       loadPizzas();
-    } catch (err) {
+    } catch {
       toast('Something went wrong');
     }
   };

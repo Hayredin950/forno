@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ClipboardCheck, Flame, Bike, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/shared/Toaster';
-import type { OrderStatus } from '@/types';
 import { orderApi } from '@/services/api';
 import type { Order } from '@/types';
 
@@ -22,6 +21,15 @@ export default function OrderTrackingPage() {
   const [eta, setEta] = useState(25 * 60);
 
   useEffect(() => { loadOrder(); }, [orderId]);
+
+  // Count down from the server-supplied estimated delivery time if present.
+  useEffect(() => {
+    if (!order) return;
+    const t = new Date(order.estimatedTime).getTime();
+    if (!Number.isNaN(t)) {
+      setEta(Math.max(0, Math.round((t - Date.now()) / 1000)));
+    }
+  }, [order]);
 
   useEffect(() => {
     if (!order || order.status === 'completed' || order.status === 'cancelled') return;

@@ -22,7 +22,7 @@ export default function PizzaDetailPage() {
     try {
       const res = await pizzaApi.getById(id);
       if (res.success) setPizza(res.data.pizza);
-    } catch (err) {
+    } catch {
       toast('Failed to load pizza details', 'error');
       navigate('/dashboard');
     }

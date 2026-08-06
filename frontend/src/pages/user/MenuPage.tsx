@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, X, Plus, Minus, Flame } from 'lucide-react';
+import { X, Plus, Minus, Flame } from 'lucide-react';
 import { pizzaApi, cartApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { Pizza } from '@/types';

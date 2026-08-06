@@ -5,7 +5,7 @@ import { inventoryApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { InventoryItem } from '@/types';
 
-const categories = ['All', 'base', 'sauce', 'cheese', 'vegetable'];
+const categories = ['All', 'base', 'sauce', 'cheese', 'veggies'];
 
 export default function AdminInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -96,7 +96,6 @@ export default function AdminInventory() {
         {filteredItems.map((item, i) => {
           const pct = (item.currentStock / item.maxCapacity) * 100;
           const isLow = item.currentStock < item.threshold;
-          const isCritical = item.currentStock < 10;
           const ringColor = pct >= 50 ? '#FF6B35' : pct >= 25 ? '#F9A825' : '#E53935';
           const circumference = 2 * Math.PI * 40;
           const offset = circumference - (pct / 100) * circumference;

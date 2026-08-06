@@ -50,6 +50,9 @@ export const sendPasswordResetEmail = async (to: string, token: string): Promise
   });
 };
 
+const escapeHtml = (s: string): string =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+
 export const sendLowStockAlertEmail = async (
   adminEmail: string,
   items: Array<{ name: string; currentStock: number; unit: string; lowStockThreshold: number }>,
@@ -57,7 +60,7 @@ export const sendLowStockAlertEmail = async (
   const rows = items
     .map(
       (i) =>
-        `<tr><td>${i.name}</td><td>${i.currentStock} ${i.unit}</td><td>${i.lowStockThreshold} ${i.unit}</td></tr>`,
+        `<tr><td>${escapeHtml(i.name)}</td><td>${i.currentStock} ${escapeHtml(i.unit)}</td><td>${i.lowStockThreshold} ${escapeHtml(i.unit)}</td></tr>`,
     )
     .join("");
 

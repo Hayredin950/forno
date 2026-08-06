@@ -45,6 +45,7 @@ export const verifyRazorpaySignature = (
   if (!secret) throw new ApiError(500, "Razorpay key secret not configured");
 
   const body = `${razorpayOrderId}|${razorpayPaymentId}`;
-  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-  return expected === razorpaySignature;
+  const expected = crypto.createHmac("sha256", secret).update(body).digest();
+  const provided = Buffer.from(razorpaySignature ?? "", "hex");
+  return provided.length === expected.length && crypto.timingSafeEqual(expected, provided);
 };

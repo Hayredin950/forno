@@ -1,12 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { Admin } from "../models/Admin";
 import { ApiError } from "../utils/apiError";
 
 export interface AuthAdminRequest extends Request {
   adminId?: string;
 }
 
-export const authAdmin = (req: AuthAdminRequest, _res: Response, next: NextFunction): void => {
+export const authAdmin = async (req: AuthAdminRequest, _res: Response, next: NextFunction): Promise<void> => {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     return next(new ApiError(401, "Authentication token missing"));
@@ -18,6 +19,10 @@ export const authAdmin = (req: AuthAdminRequest, _res: Response, next: NextFunct
   try {
     const payload = jwt.verify(token, secret) as { id: string; role: string };
     if (payload.role !== "admin") return next(new ApiError(403, "Admin access required"));
+
+    const admin = await Admin.findById(payload.id).select("email");
+    if (!admin) return next(new ApiError(401, "Admin account no longer exists"));
+
     req.adminId = payload.id;
     next();
   } catch {

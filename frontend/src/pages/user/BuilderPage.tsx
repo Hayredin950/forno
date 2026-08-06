@@ -10,22 +10,28 @@ const STEPS = [
   { key: 'base', label: 'Base', instruction: 'Choose one base for your pizza' },
   { key: 'sauce', label: 'Sauce', instruction: 'Pick your favorite sauce' },
   { key: 'cheese', label: 'Cheese', instruction: 'Select your cheese' },
-  { key: 'vegetable', label: 'Veggies', instruction: 'Add toppings (multiple allowed)' },
+  { key: 'veggies', label: 'Veggies', instruction: 'Add toppings (multiple allowed)' },
 ];
 
 export default function BuilderPage() {
   const [step, setStep] = useState(0);
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [selected, setSelected] = useState<{ base: InventoryItem | null; sauce: InventoryItem | null; cheese: InventoryItem | null; vegetable: InventoryItem[] }>({ base: null, sauce: null, cheese: null, vegetable: [] });
+  const [selected, setSelected] = useState<{ base: InventoryItem | null; sauce: InventoryItem | null; cheese: InventoryItem | null; veggies: InventoryItem[] }>({ base: null, sauce: null, cheese: null, veggies: [] });
   const [direction, setDirection] = useState(1);
+  const [loadingError, setLoadingError] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
 
   useEffect(() => { loadInventory(); }, []);
 
   const loadInventory = async () => {
-    const res = await inventoryApi.getAllForBuilder();
-    setItems(res.data.items);
+    try {
+      const res = await inventoryApi.getAllForBuilder();
+      setItems(res.data.items);
+      setLoadingError(false);
+    } catch {
+      setLoadingError(true);
+    }
   };
 
   const currentItems = useMemo(() => {
@@ -33,10 +39,10 @@ export default function BuilderPage() {
   }, [items, step]);
 
   const currentKey = STEPS[step].key as keyof typeof selected;
-  const isMulti = currentKey === 'vegetable';
+  const isMulti = currentKey === 'veggies';
 
   const isSelected = (item: InventoryItem) => {
-    if (isMulti) return selected.vegetable.some(v => v._id === item._id);
+    if (isMulti) return selected.veggies.some(v => v._id === item._id);
     return (selected as any)[currentKey]?._id === item._id;
   };
 
@@ -44,9 +50,9 @@ export default function BuilderPage() {
     if (isMulti) {
       setSelected(prev => ({
         ...prev,
-        vegetable: prev.vegetable.some(v => v._id === item._id)
-          ? prev.vegetable.filter(v => v._id !== item._id)
-          : [...prev.vegetable, item]
+        veggies: prev.veggies.some(v => v._id === item._id)
+          ? prev.veggies.filter(v => v._id !== item._id)
+          : [...prev.veggies, item]
       }));
     } else {
       setSelected(prev => ({ ...prev, [currentKey]: (prev as any)[currentKey]?._id === item._id ? null : item }));
@@ -58,7 +64,7 @@ export default function BuilderPage() {
     if (selected.base) total += selected.base.unitPrice;
     if (selected.sauce) total += selected.sauce.unitPrice;
     if (selected.cheese) total += selected.cheese.unitPrice;
-    selected.vegetable.forEach(v => total += v.unitPrice);
+    selected.veggies.forEach(v => total += v.unitPrice);
     return total;
   }, [selected]);
 
@@ -70,7 +76,7 @@ export default function BuilderPage() {
     if (isMulti) {
       const count = Math.floor(Math.random() * 3) + 2;
       const shuffled = [...catItems].sort(() => Math.random() - 0.5);
-      setSelected(prev => ({ ...prev, vegetable: shuffled.slice(0, count) }));
+      setSelected(prev => ({ ...prev, veggies: shuffled.slice(0, count) }));
     } else {
       const random = catItems[Math.floor(Math.random() * catItems.length)];
       setSelected(prev => ({ ...prev, [currentKey]: random }));
@@ -89,8 +95,12 @@ export default function BuilderPage() {
   const handleAddToCart = async () => {
     if (!selected.base || !selected.sauce || !selected.cheese) return;
     const name = `Custom ${selected.base.name}`;
+    // Deterministic id from the ingredient choices so identical builds merge
+    // into one cart line instead of creating duplicates on every add.
+    const veggieIds = selected.veggies.map(v => v._id).sort();
+    const id = `custom_${selected.base._id}_${selected.sauce._id}_${selected.cheese._id}_${veggieIds.join('_')}`;
     await cartApi.addItem({
-      id: `custom_${Date.now()}`,
+      id,
       type: 'custom',
       name,
       base: selected.base.name,
@@ -99,8 +109,8 @@ export default function BuilderPage() {
       sauceId: selected.sauce._id,
       cheese: selected.cheese.name,
       cheeseId: selected.cheese._id,
-      veggies: selected.vegetable.map(v => v.name),
-      veggieIds: selected.vegetable.map(v => v._id),
+      veggies: selected.veggies.map(v => v.name),
+      veggieIds,
       quantity: 1,
       unitPrice: totalPrice + 200,
       totalPrice: totalPrice + 200,
@@ -157,6 +167,15 @@ export default function BuilderPage() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4">
+                {loadingError && (
+                  <div className="col-span-full text-center py-10">
+                    <p className="text-forno-text-muted mb-3">Couldn't load ingredients. Check your connection.</p>
+                    <button onClick={loadInventory} className="px-4 py-2 text-sm font-medium accent-gradient text-white rounded-button hover:brightness-110 transition-all">Retry</button>
+                  </div>
+                )}
+                {!loadingError && currentItems.length === 0 && (
+                  <div className="col-span-full text-center py-10 text-forno-text-muted">No ingredients available in this category yet.</div>
+                )}
                 {currentItems.map(item => (
                   <motion.button key={item._id}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -226,7 +245,7 @@ export default function BuilderPage() {
                 </AnimatePresence>
                 {/* Veggies */}
                 <AnimatePresence>
-                  {selected.vegetable.map((v, i) => (
+                  {selected.veggies.map((v, i) => (
                     <motion.div key={v._id} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0 }}
                       transition={{ type: 'spring', stiffness: 400, damping: 12, delay: i * 0.05 }}
@@ -246,7 +265,7 @@ export default function BuilderPage() {
                 {selected.base && <div className="flex justify-between text-sm"><span className="text-forno-text-secondary">{selected.base.name}</span><span className="font-mono text-forno-text-primary">{selected.base.unitPrice > 0 ? `+₹${selected.base.unitPrice}` : 'Included'}</span></div>}
                 {selected.sauce && <div className="flex justify-between text-sm"><span className="text-forno-text-secondary">{selected.sauce.name}</span><span className="font-mono text-forno-text-primary">{selected.sauce.unitPrice > 0 ? `+₹${selected.sauce.unitPrice}` : 'Included'}</span></div>}
                 {selected.cheese && <div className="flex justify-between text-sm"><span className="text-forno-text-secondary">{selected.cheese.name}</span><span className="font-mono text-forno-text-primary">{selected.cheese.unitPrice > 0 ? `+₹${selected.cheese.unitPrice}` : 'Included'}</span></div>}
-                {selected.vegetable.map(v => (
+                {selected.veggies.map(v => (
                   <div key={v._id} className="flex justify-between text-sm"><span className="text-forno-text-secondary">{v.name}</span><span className="font-mono text-forno-text-primary">+₹{v.unitPrice}</span></div>
                 ))}
               </div>

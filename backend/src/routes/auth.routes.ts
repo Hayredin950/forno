@@ -46,7 +46,13 @@ router.post(
   resetPassword,
 );
 
-router.post("/google", googleLogin);
+router.post(
+  "/google",
+  authLimiter,
+  [body("idToken").notEmpty().withMessage("idToken is required")],
+  validate,
+  googleLogin,
+);
 
 router.post(
   "/admin/login",

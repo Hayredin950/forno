@@ -4,14 +4,17 @@ import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
 
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
   const { search, page = "1", limit = "20" } = req.query as Record<string, string>;
 
   const filter: Record<string, unknown> = {};
   if (search) {
+    const rx = escapeRegExp(search);
     filter["$or"] = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
+      { name: { $regex: rx, $options: "i" } },
+      { email: { $regex: rx, $options: "i" } },
     ];
   }
 

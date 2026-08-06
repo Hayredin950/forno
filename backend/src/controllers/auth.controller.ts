@@ -26,6 +26,7 @@ export const register = asyncHandler(async (req: Request, res: Response, next: N
     email,
     password: hashed,
     verificationToken: skipVerification ? null : verificationToken,
+    verificationTokenExpires: skipVerification ? null : new Date(Date.now() + 24 * 60 * 60 * 1000),
     isVerified: skipVerification,
   });
 
@@ -41,11 +42,15 @@ export const register = asyncHandler(async (req: Request, res: Response, next: N
 export const verifyEmail = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   const { token } = req.params as { token: string };
 
-  const user = await User.findOne({ verificationToken: token });
+  const user = await User.findOne({
+    verificationToken: token,
+    verificationTokenExpires: { $gt: new Date() },
+  });
   if (!user) return next(new ApiError(400, "Invalid or expired verification token"));
 
   user.isVerified = true;
   user.verificationToken = null;
+  user.verificationTokenExpires = null;
   await user.save();
 
   sendSuccess(res, null, "Email verified successfully. You can now log in.");
@@ -113,6 +118,9 @@ export const googleLogin = asyncHandler(async (req: Request, res: Response, next
     const ticket = await client.verifyIdToken({ idToken, audience: clientId });
     const payload = ticket.getPayload();
     if (!payload?.email) return next(new ApiError(401, "Invalid Google token"));
+    if (payload.email_verified !== true) {
+      return next(new ApiError(401, "Google email is not verified"));
+    }
 
     const email = payload.email.toLowerCase();
     let user = await User.findOne({ email });

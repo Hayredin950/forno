@@ -25,9 +25,10 @@ export const startCronJobs = (): void => {
       });
 
       // Only those that never alerted, or whose stock sank below the level
-      // recorded when we last emailed about them.
+      // recorded when we last emailed about them. lastAlertLevel === null
+      // means "never alerted" — a 0 is a REAL alert level, not "no alert".
       const pending = allLow.filter(
-        (i) => !i.lastAlertLevel || i.currentStock < i.lastAlertLevel,
+        (i) => i.lastAlertLevel === null || i.currentStock < i.lastAlertLevel,
       );
 
       if (pending.length === 0) return;

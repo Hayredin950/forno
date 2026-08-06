@@ -17,7 +17,6 @@ const allStatuses: OrderStatus[] = ['received', 'kitchen', 'delivery', 'complete
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -33,7 +32,6 @@ export default function AdminOrders() {
     if (search) params.search = search;
     const res = await adminOrderApi.getAll(params);
     setOrders(res.data.orders);
-    setTotal(res.data.total);
     setTotalPages(res.data.totalPages);
   };
 
