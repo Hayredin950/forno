@@ -111,7 +111,7 @@ export default function GoogleSignInButton() {
             document.head.appendChild(script);
           }
         }}
-        className="google-btn-container [&>div]:!w-full [&>div>div]:!w-full"
+        className="hidden google-btn-container [&>div]:!w-full [&>div>div]:!w-full"
       />
     </div>
   );
