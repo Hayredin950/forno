@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ArrowLeft, ArrowRight, Shuffle, ShoppingCart } from 'lucide-react';
 import { inventoryApi, cartApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
+import PizzaPreview from '@/components/shared/PizzaPreview';
 import type { InventoryItem } from '@/types';
 
 const STEPS = [
@@ -218,47 +219,23 @@ export default function BuilderPage() {
             <div className="glass-card p-6">
               <h4 className="text-sm font-semibold text-forno-text-primary mb-4 uppercase tracking-wider">Your Pizza</h4>
 
-              {/* Visual Pizza Preview */}
-              <div className="relative w-48 h-48 mx-auto mb-6">
-                <div className="absolute inset-0 rounded-full bg-forno-bg-tertiary border-2 border-forno-border" />
-                {/* Base */}
-                <AnimatePresence>
-                  {selected.base && (
-                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }} className="absolute inset-2 rounded-full bg-[#D4A76A] border border-[#C49A5E]" />
-                  )}
-                </AnimatePresence>
-                {/* Sauce */}
-                <AnimatePresence>
-                  {selected.sauce && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      transition={{ duration: 0.3 }} className="absolute inset-4 rounded-full border border-dashed"
-                      style={{ background: selected.sauce.name.includes('BBQ') ? '#5C3317' : selected.sauce.name.includes('Pesto') ? '#4A7C3F' : selected.sauce.name.includes('Garlic') ? '#F5F5DC' : selected.sauce.name.includes('Spicy') ? '#C1440E' : '#C53030' }} />
-                  )}
-                </AnimatePresence>
-                {/* Cheese */}
-                <AnimatePresence>
-                  {selected.cheese && (
-                    <motion.div initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 0.8, filter: 'blur(0px)' }} exit={{ opacity: 0 }}
-                      transition={{ duration: 0.4 }} className="absolute inset-6 rounded-full bg-[#FFF8E7]" />
-                  )}
-                </AnimatePresence>
-                {/* Veggies */}
-                <AnimatePresence>
-                  {selected.veggies.map((v, i) => (
-                    <motion.div key={v._id} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 12, delay: i * 0.05 }}
-                      className="absolute w-4 h-4 rounded-full"
-                      style={{
-                        background: v.name.includes('Pepper') ? '#7CB342' : v.name.includes('Mushroom') ? '#8D6E63' : v.name.includes('Onion') ? '#9C27B0' : v.name.includes('Olive') ? '#212121' : v.name.includes('Tomato') ? '#E53935' : v.name.includes('Jalap') ? '#FF6B35' : v.name.includes('Spinach') ? '#4CAF50' : '#FFEB3B',
-                        top: `${25 + (i * 37) % 55}%`,
-                        left: `${20 + (i * 53) % 60}%`,
-                      }}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
+              {/* Real-image Pizza Preview — stacks the user's chosen base/sauce/cheese/veggies */}
+              <motion.div
+                key={`${selected.base?._id}-${selected.sauce?._id}-${selected.cheese?._id}-${selected.veggies.map(v => v._id).join('-')}`}
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.35 }}
+                className="mx-auto mb-6"
+              >
+                <PizzaPreview
+                  base={selected.base}
+                  sauce={selected.sauce}
+                  cheese={selected.cheese}
+                  veggies={selected.veggies}
+                  size={192}
+                  className="mx-auto"
+                />
+              </motion.div>
 
               {/* Selected Items List */}
               <div className="space-y-2 mb-4">
