@@ -1,3 +1,4 @@
+import "dotenv/config";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import { Admin } from "./models/Admin";
@@ -5,6 +6,10 @@ import { Ingredient } from "./models/Ingredient";
 import { Pizza } from "./models/Pizza";
 import { seedAdmin, seedIngredients, seedPizzas } from "./seed-data";
 
+// BUG FIX: `import "dotenv/config"` above is required — without it this script
+// ignored the MONGO_URI from backend/.env and silently fell back to localhost,
+// so `npm run seed` could seed a completely different database than the one
+// the API server uses (menu stayed empty even though "Seed complete!" printed).
 const MONGO_URI = process.env["MONGO_URI"] ?? "mongodb://localhost:27017/forno";
 
 async function seed(): Promise<void> {
@@ -14,7 +19,7 @@ async function seed(): Promise<void> {
   }
 
   await mongoose.connect(MONGO_URI);
-  console.log("Connected to MongoDB");
+  console.log(`Connected to MongoDB — database: "${mongoose.connection.name}"`);
 
   await Admin.deleteMany({});
   await Ingredient.deleteMany({});
