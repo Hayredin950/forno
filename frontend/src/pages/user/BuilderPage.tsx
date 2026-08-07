@@ -5,6 +5,7 @@ import { Check, ArrowLeft, ArrowRight, Shuffle, ShoppingCart } from 'lucide-reac
 import { inventoryApi, cartApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import PizzaPreview from '@/components/shared/PizzaPreview';
+import { ingredientImage } from '@/lib/pizzaLayers';
 import type { InventoryItem } from '@/types';
 
 const STEPS = [
@@ -177,27 +178,35 @@ export default function BuilderPage() {
                 {!loadingError && currentItems.length === 0 && (
                   <div className="col-span-full text-center py-10 text-forno-text-muted">No ingredients available in this category yet.</div>
                 )}
-                {currentItems.map(item => (
-                  <motion.button key={item._id}
-                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    onClick={() => toggleSelect(item)}
-                    className={`glass-card p-4 text-center transition-all ${
-                      isSelected(item) ? 'border-[#FF6B35] shadow-glow-amber' : 'border-forno-border hover:border-[#FF6B35]/30'
-                    }`}>
-                    <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-3 text-lg ${
-                      isSelected(item) ? 'accent-gradient text-white' : 'bg-forno-bg-tertiary text-forno-text-muted'
-                    }`}>
-                      {item.name[0]}
-                    </div>
-                    <p className="text-sm font-medium text-forno-text-primary mb-1">{item.name}</p>
-                    {item.unitPrice > 0 && <p className="text-xs text-forno-text-muted">+₹{item.unitPrice}</p>}
-                    {isSelected(item) && (
-                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute top-2 right-2 w-5 h-5 accent-gradient rounded-full flex items-center justify-center">
-                        <Check size={12} className="text-white" />
-                      </motion.div>
-                    )}
-                  </motion.button>
-                ))}
+                {currentItems.map(item => {
+                  const imageUrl = ingredientImage(item.name);
+                  return (
+                    <motion.button key={item._id}
+                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => toggleSelect(item)}
+                      className={`relative glass-card p-4 text-center transition-all ${
+                        isSelected(item) ? 'border-[#FF6B35] shadow-glow-amber' : 'border-forno-border hover:border-[#FF6B35]/30'
+                      }`}>
+                      <div className={`w-16 h-16 mx-auto rounded-full overflow-hidden mb-3 bg-forno-bg-tertiary ${isSelected(item) ? 'ring-2 ring-[#FF6B35]' : ''}`}>
+                        {imageUrl ? (
+                          <img src={imageUrl} alt={item.name} loading="lazy" draggable={false}
+                            className="w-full h-full object-cover" style={{ background: '#1a1513' }} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-lg text-forno-text-muted">
+                            {item.name[0]}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-forno-text-primary mb-1">{item.name}</p>
+                      {item.unitPrice > 0 && <p className="text-xs text-forno-text-muted">+₹{item.unitPrice}</p>}
+                      {isSelected(item) && (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute top-2 right-2 w-5 h-5 accent-gradient rounded-full flex items-center justify-center">
+                          <Check size={12} className="text-white" />
+                        </motion.div>
+                      )}
+                    </motion.button>
+                  );
+                })}
               </div>
             </motion.div>
           </AnimatePresence>

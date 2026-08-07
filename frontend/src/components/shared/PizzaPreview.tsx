@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { InventoryItem } from "@/types";
+import { ingredientImage } from "@/lib/pizzaLayers";
 
 /**
  * Real-image pizza preview.
@@ -14,44 +15,6 @@ import type { InventoryItem } from "@/types";
  * /images/pizza-layers/<slug>.png by both the Vite dev server, Vercel, and
  * the backend's static /images route.
  */
-
-// Ingredient name -> layer asset slug (filename without extension).
-const LAYER_SLUGS: Record<string, string> = {
-  // Bases
-  "classic hand tossed": "classic-hand-tossed",
-  "thin crust": "thin-crust",
-  "cheese burst": "cheese-burst",
-  "whole wheat": "whole-wheat",
-  "gluten free": "gluten-free",
-  // Sauces
-  "classic tomato": "classic-tomato",
-  "bbq sauce": "bbq",
-  "white garlic": "white-garlic",
-  "pesto": "pesto",
-  "spicy arrabbiata": "spicy-arrabbiata",
-  // Cheeses
-  "mozzarella": "mozzarella",
-  "cheddar": "cheddar",
-  "four cheese blend": "four-cheese-blend",
-  "vegan cheese": "vegan-cheese",
-  // Veggies
-  "bell peppers": "bell-peppers",
-  "mushrooms": "mushrooms",
-  "onions": "onions",
-  "olives": "olives",
-  "tomatoes": "tomatoes",
-  "jalapeños": "jalapenos",
-  "spinach": "spinach",
-  "sweet corn": "sweet-corn",
-};
-
-const slugFor = (name: string): string | undefined =>
-  LAYER_SLUGS[name.trim().toLowerCase()];
-
-const layerUrl = (name: string): string | undefined => {
-  const slug = slugFor(name);
-  return slug ? `${import.meta.env.BASE_URL}images/pizza-layers/${slug}.png` : undefined;
-};
 
 interface PizzaPreviewProps {
   base?: InventoryItem | null;
@@ -70,11 +33,11 @@ export default function PizzaPreview({
   size = 192,
   className = "",
 }: PizzaPreviewProps) {
-  const baseUrl = base ? layerUrl(base.name) : undefined;
-  const sauceUrl = sauce ? layerUrl(sauce.name) : undefined;
-  const cheeseUrl = cheese ? layerUrl(cheese.name) : undefined;
+  const baseUrl = base ? ingredientImage(base.name) : undefined;
+  const sauceUrl = sauce ? ingredientImage(sauce.name) : undefined;
+  const cheeseUrl = cheese ? ingredientImage(cheese.name) : undefined;
   const veggieUrls = veggies
-    .map((v) => layerUrl(v.name))
+    .map((v) => ingredientImage(v.name))
     .filter((u): u is string => Boolean(u));
 
   const layerStyle: CSSProperties = {
