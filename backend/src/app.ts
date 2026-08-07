@@ -37,7 +37,33 @@ app.use(
   }),
 );
 
-app.use(helmet());
+// Google Identity Services (GIS) — the sign-in button — opens a popup/iframe
+// from accounts.google.com and coordinates with the opener via postMessage.
+// Helmet's default `Cross-Origin-Opener-Policy: same-origin` severs that
+// channel, so the OAuth popup silently fails ("COOP would block the
+// postMessage call"), which is why the button seemed to work only briefly.
+// Disable COOP, allow cross-origin reads of /images, and permit the GIS
+// script/iframe in the CSP so Google sign-in works end-to-end.
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        scriptSrc: ["'self'", "https://accounts.google.com"],
+        frameSrc: ["'self'", "https://accounts.google.com"],
+        connectSrc: ["'self'", "https://accounts.google.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+        frameAncestors: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+  })
+);
 
 app.use(
   pinoHttp({

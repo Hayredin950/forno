@@ -3,7 +3,19 @@ import type { User, Admin, Pizza, InventoryItem, CartItem, Order, OrderStatus, D
 // In production the API lives on a different origin, so the backend URL is
 // injected at build time via VITE_API_BASE_URL. Falls back to the same-origin
 // `/api` path (Vite dev proxy / backend-served static files).
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+//
+// BUG FIX: VITE_API_BASE_URL was set to the bare host (https://api.example.com)
+// without the `/api` suffix, so every call became .../auth/google -> 404. We
+// normalize it here so it always targets the backend's `/api` root regardless
+// of whether the env value includes `/api` or not.
+const API_BASE = (() => {
+  let base = (import.meta.env.VITE_API_BASE_URL || '/api').trim();
+  base = base.replace(/\/+$/, '');
+  if (/^https?:\/\//.test(base) && !/\/api(\/|$)/.test(base)) {
+    base += '/api';
+  }
+  return base;
+})();
 
 const TOKEN_KEY = 'forno_token';
 const ADMIN_TOKEN_KEY = 'forno_admin_token';
