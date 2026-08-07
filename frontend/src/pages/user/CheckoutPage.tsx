@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, ChevronDown, ChevronUp, MapPin, ShoppingCart } from 'lucide-react';
 import { cartApi, orderApi, razorpayApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
+import CartItemImage from '@/components/shared/CartItemImage';
+import DeliveryMap, { type MapLocation } from '@/components/shared/DeliveryMap';
 import type { CartItem, Order } from '@/types';
 
 export default function CheckoutPage() {
@@ -12,7 +14,22 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
-  const [address, setAddress] = useState({ street: '', city: '', state: '', pincode: '' });
+  const [address, setAddress] = useState<{ street: string; city: string; state: string; pincode: string; lat?: number; lng?: number }>({ street: '', city: '', state: '', pincode: '' });
+  const mapValue: MapLocation | null =
+    address.lat !== undefined && address.lng !== undefined
+      ? { lat: address.lat, lng: address.lng, street: address.street, city: address.city, state: address.state, pincode: address.pincode }
+      : null;
+  const handleMapChange = (loc: MapLocation) => {
+    setAddress(prev => ({
+      ...prev,
+      street: loc.street || prev.street,
+      city: loc.city || prev.city,
+      state: loc.state || prev.state,
+      pincode: loc.pincode || prev.pincode,
+      lat: loc.lat,
+      lng: loc.lng,
+    }));
+  };
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -114,13 +131,7 @@ export default function CheckoutPage() {
           <>
             {cartItems.map(item => (
               <div key={item.id} className="flex gap-4 py-4 border-b border-forno-border last:border-0">
-                <div className="w-16 h-16 rounded-lg bg-forno-bg-tertiary flex items-center justify-center shrink-0 overflow-hidden">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-lg font-bold text-forno-text-muted">{item.type === 'custom' ? 'C' : 'P'}</span>
-                  )}
-                </div>
+                <CartItemImage item={item} size={64} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-forno-text-primary truncate">{item.name}</h4>
@@ -181,6 +192,7 @@ export default function CheckoutPage() {
           <MapPin size={18} className="text-[#FF6B35]" />
           <h3 className="font-semibold text-forno-text-primary">Delivery Address</h3>
         </div>
+        <DeliveryMap value={mapValue} onChange={handleMapChange} height={280} />
         <div className="space-y-3">
           <input type="text" value={address.street} onChange={e => setAddress(p => ({ ...p, street: e.target.value }))}
             className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-3 text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50 text-sm"
