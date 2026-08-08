@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users, Settings } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users, Settings, Bike } from 'lucide-react';
 import { authApi, inventoryApi, adminOrderApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 import type { InventoryItem, Order } from '@/types';
@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Pizzas', path: '/admin/pizzas', icon: Pizza },
   { label: 'Inventory', path: '/admin/inventory', icon: Package },
   { label: 'Orders', path: '/admin/orders', icon: ShoppingBag },
+  { label: 'Deliveries', path: '/admin/deliveries', icon: Bike },
   { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
   { label: 'Users', path: '/admin/users', icon: Users },
   { label: 'Settings', path: '/admin/settings', icon: Settings },

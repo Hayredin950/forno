@@ -20,6 +20,7 @@ import AdminLayout from '@/pages/admin/AdminLayout';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminInventory from '@/pages/admin/AdminInventory';
 import AdminOrders from '@/pages/admin/AdminOrders';
+import AdminCourier from '@/pages/admin/AdminCourier';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminPizzas from '@/pages/admin/AdminPizzas';
 import AdminUsers from '@/pages/admin/AdminUsers';
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="pizzas" element={<AdminPizzas />} />
             <Route path="inventory" element={<AdminInventory />} />
             <Route path="orders" element={<AdminOrders />} />
+            <Route path="deliveries" element={<AdminCourier />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="settings" element={<AdminSettings />} />
