@@ -92,6 +92,7 @@ export const authApi = {
       _id: generateId(),
       fullName: data.fullName,
       email: data.email,
+      phone: data.phone ?? '',
       isVerified: true, // Auto-verify for demo
       addresses: [],
     };

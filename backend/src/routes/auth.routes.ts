@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { register, verifyEmail, login, forgotPassword, resetPassword, adminLogin, googleLogin } from "../controllers/auth.controller";
+import { register, verifyEmail, login, forgotPassword, resetPassword, adminLogin, googleLogin, getProfile, updateProfile } from "../controllers/auth.controller";
 import { validate } from "../middleware/validate";
 import { authLimiter } from "../middleware/rateLimiter";
+import { authUser } from "../middleware/authUser";
 
 const router = Router();
 
@@ -63,6 +64,20 @@ router.post(
   ],
   validate,
   adminLogin,
+);
+
+// Profile — phone number + saved delivery addresses (shown to the courier).
+router.get("/me", authUser, getProfile);
+router.patch(
+  "/me",
+  authUser,
+  [
+    body("name").optional().trim().isLength({ max: 80 }),
+    body("phone").optional().trim().isLength({ max: 20 }),
+    body("addresses").optional().isArray({ max: 20 }),
+  ],
+  validate,
+  updateProfile,
 );
 
 export default router;

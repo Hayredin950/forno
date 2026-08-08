@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Locate, Search, Loader2 } from "lucide-react";
@@ -29,6 +29,8 @@ interface DeliveryMapProps {
   value: MapLocation | null;
   onChange: (loc: MapLocation) => void;
   height?: number;
+  /** Helper text under the map (defaults to the checkout wording). */
+  instruction?: ReactNode;
 }
 
 // Fallback center if geolocation is unavailable or denied.
@@ -62,7 +64,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<Partial<MapLoca
   }
 }
 
-export default function DeliveryMap({ value, onChange, height = 300 }: DeliveryMapProps) {
+export default function DeliveryMap({ value, onChange, height = 300, instruction }: DeliveryMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -105,9 +107,12 @@ export default function DeliveryMap({ value, onChange, height = 300 }: DeliveryM
       pin(e.latlng.lat, e.latlng.lng);
     });
 
-    // Initial position: use provided value, else the user's device location.
+    // Initial position: use provided value if present (position the marker
+    // WITHOUT emitting onChange — otherwise a stored address would be
+    // clobbered by a fresh reverse-geocode on every mount).
     if (value) {
-      pin(value.lat, value.lng);
+      marker.setLatLng([value.lat, value.lng]);
+      map.setView([value.lat, value.lng], 15);
     } else if (navigator.geolocation) {
       setLoading(true);
       navigator.geolocation.getCurrentPosition(
@@ -189,8 +194,10 @@ export default function DeliveryMap({ value, onChange, height = 300 }: DeliveryM
         </p>
       )}
       <p className="text-xs text-forno-text-muted leading-relaxed">
-        Click or drag the <span className="text-[#FF6B35]">orange pin</span> on the map to set your delivery
-        address, or search above. Fields are filled automatically and can be edited below.
+        {instruction ?? (
+          <>Click or drag the <span className="text-[#FF6B35]">orange pin</span> on the map to set your delivery
+          address, or search above. Fields are filled automatically and can be edited below.</>
+        )}
       </p>
     </div>
   );

@@ -93,9 +93,7 @@ async function adminFetch(path: string, options: RequestInit = {}) {
 
 const STATUS_FE_TO_BE: Record<string, string> = {
   received: 'Order Received',
-  approved: 'Approved',
   kitchen: 'In Kitchen',
-  ready: 'Ready',
   delivery: 'Sent to Delivery',
   completed: 'Delivered',
   cancelled: 'Cancelled',
@@ -103,12 +101,15 @@ const STATUS_FE_TO_BE: Record<string, string> = {
 
 const STATUS_BE_TO_FE: Record<string, OrderStatus> = {
   'Order Received': 'received',
-  'Approved': 'approved',
   'In Kitchen': 'kitchen',
-  'Ready': 'ready',
   'Sent to Delivery': 'delivery',
   'Delivered': 'completed',
   'Cancelled': 'cancelled',
+  // Legacy statuses from the short-lived 6-phase pipeline: map them to their
+  // closest 3-phase equivalent so old orders keep working (and the admin
+  // transitions shown always match what the backend will accept).
+  'Approved': 'received',
+  'Ready': 'delivery',
 };
 
 // ─── Data mappers ─────────────────────────────────────────────────────────
@@ -128,19 +129,31 @@ function getPizzaImage(name: string): string {
 function mapPizza(p: any): Pizza {
   const rawImage = p.imageUrl ?? p.image;
   return {
-    _id: String(p._id),
-    name: p.name,
+    _id: String(p._id ?? ''),
+    name: p.name ?? '',
     description: p.description ?? '',
-    price: p.price ?? p.basePrice,
-    category: p.category,
-    tags: p.tags ?? [],
-    imageUrl: resolveImageUrl(rawImage) ?? getPizzaImage(p.name),
+    price: p.price ?? p.basePrice ?? 0,
+    category: p.category ?? 'veg',
+    tags: Array.isArray(p.tags) ? p.tags.filter((t: unknown) => t != null) : [],
+    imageUrl: resolveImageUrl(rawImage) ?? getPizzaImage(p.name ?? ''),
     hasImage: !!rawImage,
-    ingredients: p.ingredients ?? [],
+    ingredients: Array.isArray(p.ingredients) ? p.ingredients.filter((i: unknown) => i != null) : [],
     isAvailable: p.isAvailable ?? true,
     orderCount: p.orderCount ?? 0,
     createdAt: p.createdAt ?? '',
   };
+}
+
+/**
+ * The single-pizza endpoints (create/update/toggle/getById) return the pizza
+ * nested under `data.pizza`, while the list endpoints return flat arrays.
+ * mapPizza expects a flat object — unwrap so `name` is always present.
+ * (Previously the nested payload leaked through and `getPizzaImage(undefined)`
+ * crashed with "Cannot read properties of undefined (reading 'toLowerCase')".)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrapPizzaPayload(payload: any): any {
+  return payload && typeof payload === 'object' && payload.pizza ? payload.pizza : payload;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,6 +219,7 @@ function mapOrder(o: any): Order {
   const user = o.user;
   const userName = user?.name ?? '';
   const userEmail = user?.email ?? '';
+  const userPhone = user?.phone ?? '';
   const userId = user?._id ? String(user._id) : typeof user === 'string' ? user : '';
 
   const rawHistory = Array.isArray(o.statusHistory) && o.statusHistory.length > 0
@@ -243,6 +257,11 @@ function mapOrder(o: any): Order {
     updatedAt: o.updatedAt ?? o.createdAt ?? new Date().toISOString(),
     userName,
     userEmail,
+    userPhone,
+    contactPhone: o.contactPhone ?? '',
+    routeDistanceKm: o.routeDistanceKm ?? 0,
+    routeDurationMin: o.routeDurationMin ?? 0,
+    routeGeometry: Array.isArray(o.routeGeometry) && o.routeGeometry.length >= 2 ? (o.routeGeometry as [number, number][]) : null,
   };
 }
 
@@ -323,6 +342,7 @@ export const authApi = {
         _id: payload.user.id ?? payload.user._id ?? '',
         fullName: payload.user.name,
         email: payload.user.email,
+        phone: '',
         isVerified: true,
         addresses: [],
       };
@@ -345,6 +365,7 @@ export const authApi = {
         _id: payload.user.id ?? payload.user._id ?? '',
         fullName: payload.user.name,
         email: payload.user.email,
+        phone: '',
         isVerified: true,
         addresses: [],
       };
@@ -383,6 +404,14 @@ export const authApi = {
     localStorage.removeItem(CART_KEY);
   },
 
+  // Merge updates (e.g. a freshly saved profile) into the cached user object.
+  updateStoredUser(patch: Partial<Pick<User, 'fullName' | 'email' | 'phone'>>) {
+    const user = this.getCurrentUser();
+    if (!user) return;
+    const next = { ...user, ...patch };
+    localStorage.setItem(USER_KEY, JSON.stringify(next));
+  },
+
   adminLogout() {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     localStorage.removeItem(ADMIN_KEY);
@@ -411,6 +440,65 @@ export const authApi = {
   },
 };
 
+// ─── Profile (phone + saved addresses, editable by the user) ─────────────
+
+export interface ProfileAddress {
+  _id?: string;
+  label: string;
+  street: string;
+  city: string;
+  state: string;
+  pincode: string;
+  lat?: number;
+  lng?: number;
+  isDefault: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  addresses: ProfileAddress[];
+}
+
+export const userApi = {
+  async getMe(): Promise<{ success: boolean; data: { user: UserProfile }; message?: string }> {
+    try {
+      const res = await authFetch('/auth/me');
+      const d = res.data as { user?: Partial<UserProfile> };
+      const u = d.user ?? {};
+      return {
+        success: true,
+        data: {
+          user: {
+            id: u.id ?? '',
+            name: u.name ?? '',
+            email: u.email ?? '',
+            phone: u.phone ?? '',
+            addresses: Array.isArray(u.addresses) ? (u.addresses as ProfileAddress[]) : [],
+          },
+        },
+      };
+    } catch (e) {
+      return { success: false, data: { user: { id: '', name: '', email: '', phone: '', addresses: [] } }, message: (e as Error).message };
+    }
+  },
+
+  async updateProfile(data: { name?: string; phone?: string; addresses?: ProfileAddress[] }): Promise<{ success: boolean; message: string; data: { user: UserProfile } }> {
+    try {
+      const res = await authFetch('/auth/me', { method: 'PATCH', body: JSON.stringify(data) });
+      const d = res.data as { user?: UserProfile };
+      const user = d.user as UserProfile;
+      // Keep the locally cached user (Navbar chip, etc.) in sync.
+      if (user?.name) authApi.updateStoredUser({ fullName: user.name, phone: user.phone ?? '' });
+      return { success: true, message: res.message ?? 'Profile updated', data: { user } };
+    } catch (e) {
+      return { success: false, message: (e as Error).message, data: { user: { id: '', name: '', email: '', phone: '', addresses: [] } } };
+    }
+  },
+};
+
 // ─── Pizza ─────────────────────────────────────────────────────────────────
 
 export const pizzaApi = {
@@ -430,7 +518,7 @@ export const pizzaApi = {
 
   async getById(id: string): Promise<{ success: boolean; data: { pizza: Pizza } }> {
     const res = await apiFetch(`/pizzas/${id}`);
-    return { success: true, data: { pizza: mapPizza(res.data) } };
+    return { success: true, data: { pizza: mapPizza(unwrapPizzaPayload(res.data)) } };
   },
 
   async adminGetAll(): Promise<{ success: boolean; data: { pizzas: Pizza[]; total: number } }> {
@@ -444,7 +532,7 @@ export const pizzaApi = {
       method: 'POST',
       body: JSON.stringify(pizza)
     });
-    return { success: true, data: { pizza: mapPizza(res.data) } };
+    return { success: true, data: { pizza: mapPizza(unwrapPizzaPayload(res.data)) } };
   },
 
   async adminUpdate(id: string, pizza: Partial<{ name?: string; description?: string; price?: number; category?: string; tags?: string[]; imageUrl?: string; ingredients?: string[]; isAvailable?: boolean }>): Promise<{ success: boolean; data: { pizza: Pizza } }> {
@@ -452,7 +540,7 @@ export const pizzaApi = {
       method: 'PUT',
       body: JSON.stringify(pizza)
     });
-    return { success: true, data: { pizza: mapPizza(res.data) } };
+    return { success: true, data: { pizza: mapPizza(unwrapPizzaPayload(res.data)) } };
   },
 
   async adminDelete(id: string): Promise<{ success: boolean; message?: string }> {
@@ -464,7 +552,7 @@ export const pizzaApi = {
     const res = await adminFetch(`/pizzas/admin/toggle/${id}`, {
       method: 'PATCH'
     });
-    return { success: true, data: { pizza: mapPizza(res.data) } };
+    return { success: true, data: { pizza: mapPizza(unwrapPizzaPayload(res.data)) } };
   }
 };
 
@@ -643,7 +731,7 @@ export const razorpayApi = {
 // ─── Orders ────────────────────────────────────────────────────────────────
 
 export const orderApi = {
-  async create(data: { items: CartItem[]; deliveryAddress: { street: string; city: string; state: string; pincode: string } }): Promise<{ success: boolean; data: { order: Order } }> {
+  async create(data: { items: CartItem[]; deliveryAddress: { street: string; city: string; state: string; pincode: string }; contactPhone?: string }): Promise<{ success: boolean; data: { order: Order } }> {
     const backendItems = data.items.map(item => {
       if (item.type === 'pizza') {
         return { type: 'preset', pizzaRef: item.pizzaId, quantity: item.quantity, price: item.totalPrice };
@@ -663,7 +751,7 @@ export const orderApi = {
 
     const res = await authFetch('/orders', {
       method: 'POST',
-      body: JSON.stringify({ items: backendItems, deliveryAddress: data.deliveryAddress }),
+      body: JSON.stringify({ items: backendItems, deliveryAddress: data.deliveryAddress, contactPhone: data.contactPhone }),
     });
     return { success: true, data: { order: mapOrder(res.data) } };
   },

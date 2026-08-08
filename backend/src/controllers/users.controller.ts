@@ -35,7 +35,7 @@ export const listUsers = asyncHandler(async (req: Request, res: Response) => {
 
   const [users, total] = await Promise.all([
     User.find(filter)
-      .select("name email isVerified isActive googleId createdAt")
+      .select("name email phone isVerified isActive googleId createdAt")
       .sort(sortMap[sort] ?? { createdAt: -1 })
       .skip(skip)
       .limit(limitNum),

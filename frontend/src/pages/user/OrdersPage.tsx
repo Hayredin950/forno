@@ -8,9 +8,7 @@ import type { Order } from '@/types';
 
 const statusColors: Record<string, string> = {
   received: 'bg-[#F7931E]/15 text-[#F7931E]',
-  approved: 'bg-[#F9A825]/15 text-[#F9A825]',
   kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
-  ready: 'bg-[#FFB300]/15 text-[#FFB300]',
   delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
   completed: 'bg-[#7CB342]/15 text-[#7CB342]',
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',

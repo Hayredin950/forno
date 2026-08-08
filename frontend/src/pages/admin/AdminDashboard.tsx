@@ -8,14 +8,18 @@ import type { DashboardStats, Order, InventoryItem } from '@/types';
 
 const statusColors: Record<string, string> = {
   received: 'bg-[#F7931E]/15 text-[#F7931E]',
-  approved: 'bg-[#F9A825]/15 text-[#F9A825]',
   kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
-  ready: 'bg-[#FFB300]/15 text-[#FFB300]',
   delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
   completed: 'bg-[#7CB342]/15 text-[#7CB342]',
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',
 };
-const statusLabel: Record<string, string> = { approved: 'Approved', ready: 'Ready' };
+const statusLabel: Record<string, string> = {
+  received: 'Order Received',
+  kitchen: 'In Kitchen',
+  delivery: 'Out for Delivery',
+  completed: 'Delivered',
+  cancelled: 'Cancelled',
+};
 const fmtStatus = (s: string) => statusLabel[s] || s.charAt(0).toUpperCase() + s.slice(1);
 
 function CountUp({ target, duration = 1000 }: { target: number; duration?: number }) {

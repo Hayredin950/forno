@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, MoreHorizontal, ChevronLeft, ChevronRight, X, MapPin, Clock, CheckCircle2 } from 'lucide-react';
 import { adminOrderApi } from '@/services/api';
 import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
+import CustomBuildDetails from '@/components/shared/CustomBuildDetails';
+import { useOrderMaps, customBuildSummary } from '@/lib/orderItems';
 import { useToast } from '@/components/shared/Toaster';
-import type { Order, OrderStatus } from '@/types';const statusFilters = ['All', 'received', 'approved', 'kitchen', 'ready', 'delivery', 'completed', 'cancelled'];
+import type { Order, OrderStatus } from '@/types';
+const statusFilters = ['All', 'received', 'kitchen', 'delivery', 'completed', 'cancelled'];
 const statusColors: Record<string, string> = {
   received: 'bg-[#F7931E]/15 text-[#F7931E]',
-  approved: 'bg-[#F9A825]/15 text-[#F9A825]',
   kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
-  ready: 'bg-[#FFB300]/15 text-[#FFB300]',
   delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
   completed: 'bg-[#7CB342]/15 text-[#7CB342]',
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',
@@ -17,10 +18,8 @@ const statusColors: Record<string, string> = {
 // Mirrors the backend's CAN_TRANSITION state machine: orders can only move
 // forward (plus cancel before dispatch), so admins never see invalid options.
 const CAN_TRANSITION: Record<OrderStatus, OrderStatus[]> = {
-  received: ['approved', 'cancelled'],
-  approved: ['kitchen', 'cancelled'],
-  kitchen: ['ready', 'cancelled'],
-  ready: ['delivery'],
+  received: ['kitchen', 'cancelled'],
+  kitchen: ['delivery', 'cancelled'],
   delivery: ['completed'],
   completed: [],
   cancelled: [],
@@ -38,6 +37,7 @@ export default function AdminOrders() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const toast = useToast();
+  const maps = useOrderMaps();
 
   useEffect(() => { loadOrders(); }, [page, statusFilter, search, sort]);
 
@@ -113,7 +113,9 @@ export default function AdminOrders() {
                   className="border-b border-forno-border last:border-0 hover:bg-white/[0.02] transition-colors cursor-pointer">
                   <td className="px-4 py-3.5 font-mono text-[13px] text-forno-text-primary whitespace-nowrap">{order.orderId}</td>
                   <td className="px-4 py-3.5 text-sm text-forno-text-primary">{order.userName || 'Guest'}</td>
-                  <td className="px-4 py-3.5 text-[13px] text-forno-text-secondary">{order.userEmail || '-'}</td>
+                  <td className="px-4 py-3.5 text-[13px] text-forno-text-secondary">
+                    {order.contactPhone || order.userPhone || order.userEmail || '-'}
+                  </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2">
                       <OrderItemThumbs items={order.items} size={32} />
@@ -185,20 +187,27 @@ export default function AdminOrders() {
                   <h4 className="text-xs uppercase tracking-[0.06em] text-forno-text-muted font-medium mb-3">Items ({detailOrder.items.length})</h4>
                   <div className="space-y-3">
                     {detailOrder.items.map((item, i) => (
-                      <div key={i} className="flex items-center gap-4 bg-forno-bg-tertiary/50 border border-forno-border rounded-lg p-3">
-                        <OrderItemThumbs items={[item]} size={56} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-forno-text-primary">{item.name}</p>
-                          <p className="text-xs text-forno-text-muted truncate">
-                            {item.type === 'custom'
-                              ? `Custom build${item.base ? ` • ${item.base}` : ''}${item.sauce ? ` + ${item.sauce}` : ''}${item.cheese ? ` + ${item.cheese}` : ''}${(item.veggies ?? []).length ? ` + ${item.veggies!.length} veggie(s)` : ''}`
-                              : 'Catalogue pizza'}
-                          </p>
+                      <div key={i} className="bg-forno-bg-tertiary/50 border border-forno-border rounded-lg p-3">
+                        <div className="flex items-center gap-4">
+                          <OrderItemThumbs items={[item]} size={56} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-forno-text-primary">{item.name}</p>
+                            <p className="text-xs text-forno-text-muted truncate">
+                              {item.type === 'custom'
+                                ? customBuildSummary(item, maps)
+                                : 'Catalogue pizza'}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-mono text-forno-text-primary">₹{item.totalPrice.toFixed(2)}</p>
+                            <p className="text-[11px] text-forno-text-muted">× {item.quantity}</p>
+                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm font-mono text-forno-text-primary">₹{item.totalPrice.toFixed(2)}</p>
-                          <p className="text-[11px] text-forno-text-muted">× {item.quantity}</p>
-                        </div>
+                        {item.type === 'custom' && (
+                          <div className="mt-3 pt-3 border-t border-forno-border/60">
+                            <CustomBuildDetails item={item} />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -218,6 +227,11 @@ export default function AdminOrders() {
                     <p className="text-xs uppercase tracking-wide text-forno-text-muted mb-2 flex items-center gap-1.5"><MapPin size={12} /> Delivery Address</p>
                     <p className="text-sm text-forno-text-primary">{detailOrder.deliveryAddress.street}</p>
                     <p className="text-sm text-forno-text-secondary">{detailOrder.deliveryAddress.city}, {detailOrder.deliveryAddress.state} — {detailOrder.deliveryAddress.pincode}</p>
+                    {(detailOrder.contactPhone || detailOrder.userPhone) && (
+                      <p className="text-sm text-[#7CB342] mt-2">
+                        📞 {detailOrder.contactPhone || detailOrder.userPhone}
+                      </p>
+                    )}
                   </div>
                   <div className="bg-forno-bg-tertiary/50 border border-forno-border rounded-lg p-4">
                     <p className="text-xs uppercase tracking-wide text-forno-text-muted mb-2 flex items-center gap-1.5"><Clock size={12} /> Timeline</p>

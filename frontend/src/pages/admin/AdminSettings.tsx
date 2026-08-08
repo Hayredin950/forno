@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Save, Mail, Phone, MapPin, AtSign, Share2, Globe, Users, Tag } from 'lucide-react';
 import { adminSettingsApi, type SiteConfigData } from '@/services/api';
+import DeliveryMap, { type MapLocation } from '@/components/shared/DeliveryMap';
 import { useToast } from '@/components/shared/Toaster';
+
+// Combine a map picker result into a single human-readable address line.
+const joinAddress = (loc: MapLocation): string =>
+  [
+    loc.street,
+    [loc.city, loc.state].filter(Boolean).join(', '),
+  ].filter(Boolean).join(', ') + (loc.pincode ? ` — ${loc.pincode}` : '');
 
 const EMPTY: SiteConfigData = {
   contactPhone: '',
@@ -138,16 +146,29 @@ export default function AdminSettings() {
               <label className={labelCls}>Address</label>
               <input type="text" value={form.deliveryOrigin.address} onChange={e => set('deliveryOrigin', { ...form.deliveryOrigin, address: e.target.value })} placeholder="12 Wood-Fired Lane, Mumbai" className={inputCls} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Latitude</label>
-                <input type="number" step="any" value={form.deliveryOrigin.lat} onChange={e => set('deliveryOrigin', { ...form.deliveryOrigin, lat: Number(e.target.value) })} className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Longitude</label>
-                <input type="number" step="any" value={form.deliveryOrigin.lng} onChange={e => set('deliveryOrigin', { ...form.deliveryOrigin, lng: Number(e.target.value) })} className={inputCls} />
-              </div>
-            </div>
+            {/* Pick the kitchen on the map — the same picker customers see at
+                checkout. Search, drag the pin, or use your device location;
+                address + coordinates fill in automatically. */}
+            <DeliveryMap
+              value={form.deliveryOrigin.lat !== 0 || form.deliveryOrigin.lng !== 0
+                ? {
+                    lat: form.deliveryOrigin.lat,
+                    lng: form.deliveryOrigin.lng,
+                    street: form.deliveryOrigin.address.split(' — ')[0] ?? '',
+                    city: '',
+                    state: '',
+                    pincode: form.deliveryOrigin.address.split(' — ')[1] ?? '',
+                  }
+                : null}
+              onChange={(loc) => set('deliveryOrigin', {
+                ...form.deliveryOrigin,
+                lat: loc.lat,
+                lng: loc.lng,
+                address: joinAddress(loc),
+              })}
+              height={260}
+              instruction={<>Pin the <span className="text-[#FF6B35]">kitchen location</span> on the map, or search above. Delivery time is calculated from here to the customer's address.</>}
+            />
           </div>
         </motion.div>
 

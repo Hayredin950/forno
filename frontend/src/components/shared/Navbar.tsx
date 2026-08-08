@@ -90,7 +90,7 @@ export default function Navbar() {
 
                 {user ? (
                   <div className="hidden md:flex items-center gap-3">
-                    <Link to="/dashboard/orders" className="flex items-center gap-2 text-sm text-forno-text-secondary hover:text-forno-text-primary transition-colors">
+                    <Link to="/dashboard/profile" title="My profile" className="flex items-center gap-2 text-sm text-forno-text-secondary hover:text-forno-text-primary transition-colors">
                       <User size={16} />
                       <span className="max-w-[100px] truncate">{user.fullName}</span>
                     </Link>
@@ -138,6 +138,13 @@ export default function Navbar() {
                     </Link>
                   </motion.div>
                 ))}
+                {user && (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (navLinks.length) * 0.05 }}>
+                    <Link to="/dashboard/profile" onClick={() => setMobileOpen(false)} className="text-xl text-forno-text-secondary hover:text-[#FF6B35] transition-colors">
+                      My Profile
+                    </Link>
+                  </motion.div>
+                )}
                 {user ? (
                   <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
                     onClick={() => { handleLogout(); setMobileOpen(false); }}

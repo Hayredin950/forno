@@ -5,14 +5,17 @@ import { ClipboardCheck, Flame, Bike, ArrowLeft, MapPin } from 'lucide-react';
 import { useToast } from '@/components/shared/Toaster';
 import { orderApi, siteConfigApi, type DeliveryOrigin } from '@/services/api';
 import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
+import CustomBuildDetails from '@/components/shared/CustomBuildDetails';
+import RouteMap from '@/components/shared/RouteMap';
+import { useOrderMaps, customBuildSummary } from '@/lib/orderItems';
+import { haversineKm } from '@/lib/route';
 import type { Order } from '@/types';
 
 const STATUS_STEPS: { status: string; label: string; icon: typeof ClipboardCheck; color: string }[] = [
   { status: 'received', label: 'Order Received', icon: ClipboardCheck, color: '#F7931E' },
-  { status: 'approved', label: 'Approved by Kitchen', icon: ClipboardCheck, color: '#F9A825' },
   { status: 'kitchen', label: 'In Kitchen', icon: Flame, color: '#FF6B35' },
-  { status: 'ready', label: 'Ready for Delivery', icon: ClipboardCheck, color: '#FFB300' },
   { status: 'delivery', label: 'Out for Delivery', icon: Bike, color: '#7CB342' },
+  { status: 'completed', label: 'Delivered', icon: ClipboardCheck, color: '#7CB342' },
 ];
 
 export default function OrderTrackingPage() {
@@ -23,6 +26,7 @@ export default function OrderTrackingPage() {
   const [currentStatus, setCurrentStatus] = useState<string>('received');
   const [eta, setEta] = useState(25 * 60);
   const [kitchen, setKitchen] = useState<DeliveryOrigin | null>(null);
+  const maps = useOrderMaps();
 
   useEffect(() => { loadOrder(); }, [orderId]);
 
@@ -75,6 +79,24 @@ export default function OrderTrackingPage() {
     }
   };
 
+  // Route map inputs: kitchen (admin-set) → the customer's picked location.
+  const origin =
+    kitchen && kitchen.lat !== 0 && kitchen.lng !== 0
+      ? { lat: kitchen.lat, lng: kitchen.lng, label: kitchen.label || 'Forno Kitchen' }
+      : null;
+  const dest =
+    order?.deliveryAddress.lat !== undefined && order?.deliveryAddress.lng !== undefined &&
+    order?.deliveryAddress.lat !== 0 && order?.deliveryAddress.lng !== 0
+      ? { lat: order.deliveryAddress.lat, lng: order.deliveryAddress.lng, label: 'Your address' }
+      : null;
+  // Real route distance if the backend captured it, else a straight-line estimate.
+  const displayKm =
+    order && (order.routeDistanceKm ?? 0) > 0
+      ? order.routeDistanceKm!
+      : origin && dest
+        ? Math.round(haversineKm(origin.lat, origin.lng, dest.lat, dest.lng) * 10) / 10
+        : 0;
+
   const currentStepIdx = STATUS_STEPS.findIndex(s => s.status === currentStatus);
 
   const formatTime = (seconds: number) => {
@@ -116,18 +138,25 @@ export default function OrderTrackingPage() {
         <h4 className="text-sm font-semibold text-forno-text-primary mb-4">Your Order</h4>
         <div className="space-y-3">
           {order.items.map((item, i) => (
-            <div key={i} className="flex items-center gap-4">
-              <OrderItemThumbs items={[item]} size={56} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-forno-text-primary">{item.name}</p>
-                <p className="text-xs text-forno-text-muted">
-                  {item.type === 'custom'
-                    ? `Custom build${item.base ? ` • ${item.base}` : ''}${item.sauce ? ` + ${item.sauce}` : ''}${item.cheese ? ` + ${item.cheese}` : ''}${(item.veggies ?? []).length ? ` + ${item.veggies!.length} topping(s)` : ''}`
-                    : 'Catalogue pizza'}
-                  {' × '}{item.quantity}
-                </p>
+            <div key={i} className="border border-forno-border rounded-lg p-3">
+              <div className="flex items-center gap-4">
+                <OrderItemThumbs items={[item]} size={56} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-forno-text-primary">{item.name}</p>
+                  <p className="text-xs text-forno-text-muted">
+                    {item.type === 'custom'
+                      ? customBuildSummary(item, maps)
+                      : 'Catalogue pizza'}
+                    {' × '}{item.quantity}
+                  </p>
+                </div>
+                <span className="font-mono text-sm text-forno-text-primary shrink-0">₹{item.totalPrice.toFixed(2)}</span>
               </div>
-              <span className="font-mono text-sm text-forno-text-primary shrink-0">₹{item.totalPrice.toFixed(2)}</span>
+              {item.type === 'custom' && (
+                <div className="mt-3 pt-3 border-t border-forno-border/60">
+                  <CustomBuildDetails item={item} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -191,33 +220,30 @@ export default function OrderTrackingPage() {
         </div>
       </div>
 
-      {/* Map with Google Maps */}
+      {/* Live Delivery Tracking — real road route between kitchen and home */}
       <div className="glass-card p-6">
-        <h4 className="text-sm font-semibold text-forno-text-primary mb-4">Live Delivery Tracking</h4>
-        <div className="relative h-64 bg-forno-bg-tertiary rounded-lg overflow-hidden">
-          {currentStatus === 'delivery' || currentStatus === 'completed' ? (
-            kitchen && kitchen.lat !== 0 && kitchen.lng !== 0 ? (
-              <iframe
-                width="100%"
-                height="100%"
-                style={{ border: 0 }}
-                loading="lazy"
-                allowFullScreen
-                referrerPolicy="no-referrer-when-downgrade"
-                src={`https://maps.google.com/maps?q=${kitchen.lat},${kitchen.lng}&z=15&output=embed`}
-                title="Kitchen location map"
-                className="absolute inset-0"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-forno-text-muted px-6">
-                <p className="text-sm text-center">Map unavailable — the kitchen location isn't configured yet.<br />Set it under Admin → Settings → Delivery Origin.</p>
-              </div>
-            )
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-semibold text-forno-text-primary">Live Delivery Tracking</h4>
+          {displayKm > 0 && (
+            <span className="text-xs font-mono text-[#7CB342]">≈ {displayKm} km</span>
+          )}
+        </div>
+        <div className="relative bg-forno-bg-tertiary rounded-lg overflow-hidden">
+          {origin && dest ? (
+            <RouteMap
+              origin={origin}
+              destination={dest}
+              route={order.routeGeometry ?? null}
+              courier={currentStatus === 'delivery' ? 'moving' : currentStatus === 'completed' ? 'arrived' : 'hidden'}
+              height={300}
+            />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-forno-text-muted">
-              <div className="text-center">
+            <div className="flex items-center justify-center text-forno-text-muted h-[300px]">
+              <div className="text-center px-6">
                 <Flame size={32} className="mx-auto mb-2 text-[#FF6B35]" />
-                <p className="text-sm">Map will appear when order is out for delivery</p>
+                <p className="text-sm">
+                  {!kitchen || kitchen.lat === 0 ? 'The kitchen location isn\'t configured yet — set it under Admin → Settings → Delivery Origin.' : 'Delivery coordinates unavailable for this address.'}
+                </p>
               </div>
             </div>
           )}
@@ -236,6 +262,9 @@ export default function OrderTrackingPage() {
             <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-wide text-forno-text-muted">To (your address)</p>
               <p className="text-forno-text-primary truncate">{order.deliveryAddress.street}, {order.deliveryAddress.city} — {order.deliveryAddress.pincode}</p>
+              {(order.contactPhone || order.userPhone) && (
+                <p className="text-[11px] text-forno-text-muted mt-0.5">Contact: {order.contactPhone || order.userPhone}</p>
+              )}
             </div>
           </div>
         </div>
@@ -247,16 +276,17 @@ export default function OrderTrackingPage() {
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     received: 'bg-[#F7931E]/15 text-[#F7931E]',
-    approved: 'bg-[#F9A825]/15 text-[#F9A825]',
     kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
-    ready: 'bg-[#FFB300]/15 text-[#FFB300]',
     delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
     completed: 'bg-[#7CB342]/15 text-[#7CB342]',
     cancelled: 'bg-[#E53935]/15 text-[#E53935]',
   };
   const label: Record<string, string> = {
-    approved: 'Approved',
-    ready: 'Ready',
+    received: 'Order Received',
+    kitchen: 'In Kitchen',
+    delivery: 'Out for Delivery',
+    completed: 'Delivered',
+    cancelled: 'Cancelled',
   };
   return <span className={`px-3 py-1 rounded-pill text-xs font-semibold ${colors[status] || colors.received}`}>{label[status] || status.charAt(0).toUpperCase() + status.slice(1)}</span>;
 }

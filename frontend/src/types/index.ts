@@ -2,6 +2,7 @@ export interface User {
   _id: string;
   fullName: string;
   email: string;
+  phone: string;
   isVerified: boolean;
   addresses: Address[];
 }
@@ -12,6 +13,8 @@ export interface Address {
   city: string;
   state: string;
   pincode: string;
+  lat?: number;
+  lng?: number;
   isDefault: boolean;
 }
 
@@ -91,8 +94,10 @@ export interface Order {
   tax: number;
   deliveryFee: number;
   total: number;
-  status: 'received' | 'approved' | 'kitchen' | 'ready' | 'delivery' | 'completed' | 'cancelled';
+  status: 'received' | 'kitchen' | 'delivery' | 'completed' | 'cancelled';
   statusHistory: { status: string; timestamp: string; updatedBy: string }[];
+  userPhone?: string;
+  contactPhone?: string;
   payment: {
     status: 'pending' | 'completed' | 'failed';
     amount: number;
@@ -102,15 +107,22 @@ export interface Order {
     city: string;
     state: string;
     pincode: string;
+    lat?: number;
+    lng?: number;
   };
   estimatedTime: string;
   createdAt: string;
   updatedAt: string;
   userName?: string;
   userEmail?: string;
+  // Real road route captured at order creation (OSRM): distance in km,
+  // driving minutes, and the polyline as [lat, lng] pairs for the map.
+  routeDistanceKm?: number;
+  routeDurationMin?: number;
+  routeGeometry?: [number, number][] | null;
 }
 
-export type OrderStatus = 'received' | 'approved' | 'kitchen' | 'ready' | 'delivery' | 'completed' | 'cancelled';
+export type OrderStatus = 'received' | 'kitchen' | 'delivery' | 'completed' | 'cancelled';
 
 export interface DashboardStats {
   totalOrders: number;

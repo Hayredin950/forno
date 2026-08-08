@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus, AlertTriangle, Trash2, PackagePlus, Search, X, Upload, Image as ImageIcon, Pencil } from 'lucide-react';
 import { inventoryApi, adminUploadApi } from '@/services/api';
@@ -53,9 +54,12 @@ function ImagePicker({ value, uploading, onFile, onUrl, onClear }: {
 
 export default function AdminInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [searchParams] = useSearchParams();
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
-  const [stockLevel, setStockLevel] = useState<StockLevel>('All');
+  // The notification bell / sidebar alert deep-link here with ?stock=low so
+  // the page opens already filtered to the items that need attention.
+  const [stockLevel, setStockLevel] = useState<StockLevel>(() => (searchParams.get('stock') === 'low' ? 'Low' : 'All'));
   const [sort, setSort] = useState<SortKey>('name');
   const [updateModal, setUpdateModal] = useState<{ item: InventoryItem; stock: number; threshold: number } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -68,6 +72,13 @@ export default function AdminInventory() {
   const toast = useToast();
 
   useEffect(() => { loadItems(); }, [activeCategory]);
+
+  // Deep-link support: the notification bell / sidebar alert link here with
+  // ?stock=low. The effect (not just the useState initializer) catches
+  // same-route navigation, where the component doesn't remount.
+  useEffect(() => {
+    if (searchParams.get('stock') === 'low') setStockLevel('Low');
+  }, [searchParams]);
 
   const loadItems = async () => {
     try {

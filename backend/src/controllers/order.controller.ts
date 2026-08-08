@@ -15,7 +15,9 @@ import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { roundMoney } from "../utils/pricing";
 import { getPricingConfig, calcTax, calcDeliveryFee } from "../services/pricing.service";
+import { estimateRoute } from "../services/route.service";
 import { getOrCreateSiteConfig } from "../models/SiteConfig";
+import { User } from "../models/User";
 import type { AuthUserRequest } from "../middleware/authUser";
 import type { DeliveryAddress } from "../models/Order";
 
@@ -35,30 +37,26 @@ const normalizeAddress = (raw: unknown): DeliveryAddress => {
   };
 };
 
-/** Great-circle distance in km between two coordinates. */
-const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-};
-
 /**
- * Realistic ETA based on the distance between the kitchen (admin-configured
- * delivery origin) and the customer's chosen location: ~20 min prep time plus
- * travel at ~25 km/h average city delivery speed. Falls back to 30 minutes
- * whenever coordinates aren't available on either side.
+ * Realistic delivery estimate based on the REAL road route between the
+ * kitchen (admin-configured delivery origin) and the customer: ~20 min prep
+ * time plus the routing service's actual driving duration. Falls back to a
+ * 30-minute estimate whenever coordinates aren't available on either side.
  */
-const estimateDeliveryDate = async (dest: DeliveryAddress | undefined): Promise<Date> => {
-  const fallback = new Date(Date.now() + 30 * 60000);
+const estimateDelivery = async (dest: DeliveryAddress | undefined) => {
+  const fallbackDate = new Date(Date.now() + 30 * 60000);
   const origin = (await getOrCreateSiteConfig()).deliveryOrigin;
-  if (!dest?.lat || !dest?.lng || !origin?.lat || !origin?.lng) return fallback;
-  const km = haversineKm(origin.lat, origin.lng, dest.lat, dest.lng);
-  if (!Number.isFinite(km)) return fallback;
-  const minutes = Math.round(20 + (km / 25) * 60);
-  return new Date(Date.now() + Math.max(20, minutes) * 60000);
+  if (!dest?.lat || !dest?.lng || !origin?.lat || !origin?.lng) {
+    return { estimatedTime: fallbackDate, distanceKm: 0, durationMin: 0, coordinates: null as [number, number][] | null };
+  }
+  const route = await estimateRoute({ lat: origin.lat, lng: origin.lng }, { lat: dest.lat, lng: dest.lng });
+  const minutes = Math.round(20 + route.durationMin);
+  return {
+    estimatedTime: new Date(Date.now() + Math.max(20, minutes) * 60000),
+    distanceKm: route.distanceKm,
+    durationMin: route.durationMin,
+    coordinates: route.coordinates,
+  };
 };
 
 /** Resolve and price one order item server-side (never trust client prices). */
@@ -143,6 +141,11 @@ export const createOrder = asyncHandler(async (req: AuthUserRequest, res: Respon
   }
 
   const addr = normalizeAddress(deliveryAddress);
+
+  // Snapshot the customer's name + phone on the order so the courier always
+  // has a way to reach them, even if the profile changes later.
+  const customer = await User.findById(userId).select("name phone");
+  const delivery = await estimateDelivery(addr);
   const order = await Order.create({
     user: userId,
     items: resolvedItems,
@@ -150,10 +153,15 @@ export const createOrder = asyncHandler(async (req: AuthUserRequest, res: Respon
     tax,
     deliveryFee,
     totalAmount,
+    customerName: customer?.name ?? "",
+    contactPhone: String(req.body?.contactPhone ?? "").trim() || customer?.phone || "",
     deliveryAddress: addr,
     orderStatus: "Order Received",
     statusHistory: [{ status: "Order Received", timestamp: new Date(), updatedBy: "system" }],
-    estimatedTime: await estimateDeliveryDate(addr),
+    estimatedTime: delivery.estimatedTime,
+    routeDistanceKm: delivery.distanceKm,
+    routeDurationMin: delivery.durationMin,
+    routeGeometry: delivery.coordinates,
   });
 
   sendSuccess(res, order, "Order created", 201);
@@ -229,7 +237,12 @@ export const verifyPayment = asyncHandler(async (req: AuthUserRequest, res: Resp
     await decrementStockForOrder(order.items, String(order._id));
     order.orderStatus = "Order Received";
     order.statusUpdatedAt = new Date();
-    order.estimatedTime = await estimateDeliveryDate(order.deliveryAddress);
+    // Reuse the route captured at order creation (avoid a second slow routing
+    // call inside the payment flow); only recompute if it wasn't stored.
+    order.estimatedTime =
+      order.routeDistanceKm > 0
+        ? new Date(Date.now() + Math.max(20, order.routeDurationMin + 20) * 60000)
+        : (await estimateDelivery(order.deliveryAddress)).estimatedTime;
     await order.save();
 
     // Keep per-pizza popularity counters in sync with real sales.
@@ -259,7 +272,10 @@ export const cancelOrder = asyncHandler(async (req: AuthUserRequest, res: Respon
     return next(new ApiError(409, "Paid orders can't be cancelled here — contact support"));
   }
   if (order.orderStatus === "Cancelled" || order.orderStatus === "Delivered") {
-    return next(new ApiError(409, `Order is already ${order.orderStatus.toLowerCase()}`));
+    // String() guard: legacy orders could theoretically carry an undefined
+    // status, which previously crashed the endpoint with a toLowerCase error.
+    const label = String(order.orderStatus ?? "").toLowerCase();
+    return next(new ApiError(409, `Order is already ${label}`));
   }
 
   order.orderStatus = "Cancelled";

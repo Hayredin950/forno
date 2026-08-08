@@ -53,11 +53,13 @@ export default function AdminPizzas() {
     let list = [...pizzas];
     const q = search.trim().toLowerCase();
     if (q) {
+      // Guard each entry: legacy rows can contain null/undefined tag entries,
+      // which used to crash the search with a toLowerCase error.
       list = list.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.tags.some(t => t.toLowerCase().includes(q)) ||
-        p.ingredients.some(i => i.toLowerCase().includes(q)),
+        (p.name ?? '').toLowerCase().includes(q) ||
+        (p.description ?? '').toLowerCase().includes(q) ||
+        (p.tags ?? []).some(t => t && t.toLowerCase().includes(q)) ||
+        (p.ingredients ?? []).some(i => i && i.toLowerCase().includes(q)),
       );
     }
     if (category !== 'All') list = list.filter(p => p.category === category);

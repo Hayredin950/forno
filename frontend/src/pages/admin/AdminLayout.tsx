@@ -21,7 +21,16 @@ export default function AdminLayout() {
   const [lowStock, setLowStock] = useState<InventoryItem[]>([]);
   const [newOrders, setNewOrders] = useState<Order[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
+  // "Seen" alert keys (e.g. `low:<ingredientId>` / `order:<orderId>`) persist
+  // in localStorage so the badge only counts alerts that still need attention.
+  const [seenKeys, setSeenKeys] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('forno_admin_seen_alerts') ?? '[]')); } catch { return new Set(); }
+  });
   const admin = authApi.getCurrentAdmin();
+
+  useEffect(() => {
+    localStorage.setItem('forno_admin_seen_alerts', JSON.stringify([...seenKeys]));
+  }, [seenKeys]);
 
   // Real notifications: inventory below its alert threshold + fresh orders.
   useEffect(() => {
@@ -34,7 +43,7 @@ export default function AdminLayout() {
         setLowStock(stockRes.data.items.slice(0, 6));
         // "Needs attention" = not yet in the kitchen pipeline's happy path.
         setNewOrders(ordersRes.data.orders
-          .filter(o => o.status === 'received' || o.status === 'approved' || o.status === 'kitchen')
+          .filter(o => o.status === 'received' || o.status === 'kitchen')
           .slice(0, 5));
       } catch { /* keep last known state */ }
     };
@@ -43,7 +52,19 @@ export default function AdminLayout() {
     return () => clearInterval(interval);
   }, []);
 
-  const alertCount = lowStock.length + newOrders.length;
+  // Flatten to alert items with stable keys for seen-tracking.
+  const alerts = [
+    ...lowStock.map(item => ({ key: `low:${item._id}`, title: item.name, sub: `${item.currentStock} left`, to: '/admin/inventory?stock=low' })),
+    ...newOrders.map(order => ({ key: `order:${order._id}`, title: order.orderId, sub: `₹${order.total.toFixed(0)}`, to: '/admin/orders' })),
+  ];
+  const unread = alerts.filter(a => !seenKeys.has(a.key));
+  const alertCount = unread.length;
+
+  const markSeen = (key: string) => setSeenKeys(prev => new Set(prev).add(key));
+  const markAllSeen = () => setSeenKeys(prev => new Set([...prev, ...alerts.map(a => a.key)]));
+  // Heading to inventory: only acknowledge the low-stock alerts, never the
+  // order alerts (those still need the admin's attention).
+  const markLowSeen = () => setSeenKeys(prev => new Set([...prev, ...lowStock.map(item => `low:${item._id}`)]));
 
   const handleLogout = () => {
     authApi.adminLogout();
@@ -82,7 +103,8 @@ export default function AdminLayout() {
         {alertCount > 0 && (
           <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="mx-3 mb-3 p-3 rounded-lg bg-[#FF6B35]/5 border-l-2 border-[#F9A825]">
             <p className="text-xs text-forno-text-secondary"><span className="text-[#F9A825] font-semibold">{alertCount}</span> alert{alertCount === 1 ? '' : 's'} need attention</p>
-            <Link to="/admin/inventory" className="text-xs text-[#FF6B35] hover:underline mt-1 inline-block">View Inventory →</Link>
+            {/* Deep-link straight to the low-stock filter on the inventory page */}
+            <Link to="/admin/inventory?stock=low" onClick={() => markLowSeen()} className="text-xs text-[#FF6B35] hover:underline mt-1 inline-block">View Inventory →</Link>
           </motion.div>
         )}
 
@@ -121,8 +143,8 @@ export default function AdminLayout() {
                           <div className="px-4 py-2">
                             <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5">Low stock</p>
                             {lowStock.map(item => (
-                              <button key={item._id} onClick={() => { setNotifOpen(false); navigate('/admin/inventory'); }}
-                                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors">
+                              <button key={item._id} onClick={() => { markSeen(`low:${item._id}`); setNotifOpen(false); navigate('/admin/inventory?stock=low'); }}
+                                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors ${seenKeys.has(`low:${item._id}`) ? 'opacity-50' : ''}`}>
                                 <span className="text-sm text-forno-text-primary truncate">{item.name}</span>
                                 <span className="font-mono text-xs text-forno-accent-red shrink-0">{item.currentStock} left</span>
                               </button>
@@ -133,20 +155,29 @@ export default function AdminLayout() {
                           <div className="px-4 py-2 border-t border-forno-border">
                             <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5">New orders</p>
                             {newOrders.map(order => (
-                              <button key={order._id} onClick={() => { setNotifOpen(false); navigate('/admin/orders'); }}
-                                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors">
+                              <button key={order._id} onClick={() => { markSeen(`order:${order._id}`); setNotifOpen(false); navigate('/admin/orders'); }}
+                                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors ${seenKeys.has(`order:${order._id}`) ? 'opacity-50' : ''}`}>
                                 <span className="text-sm font-mono text-forno-text-primary truncate">{order.orderId}</span>
                                 <span className="text-xs text-forno-text-muted shrink-0">₹{order.total.toFixed(0)}</span>
                               </button>
                             ))}
                           </div>
                         )}
-                        {alertCount === 0 && (
+                        {alerts.length === 0 && (
                           <p className="px-4 py-8 text-center text-sm text-forno-text-muted">All caught up — no alerts 🎉</p>
                         )}
+                        {alerts.length > 0 && alertCount === 0 && (
+                          <p className="px-4 py-4 text-center text-sm text-forno-text-muted">All marked as seen</p>
+                        )}
                       </div>
-                      <div className="px-4 py-2.5 border-t border-forno-border">
-                        <button onClick={() => { setNotifOpen(false); navigate('/admin/inventory'); }} className="text-xs text-[#FF6B35] hover:underline">Manage inventory →</button>
+                      <div className="px-4 py-2.5 border-t border-forno-border flex items-center justify-between gap-2">
+                        <button onClick={() => { markAllSeen(); }} disabled={alertCount === 0}
+                          className="text-xs text-[#FF6B35] hover:underline disabled:opacity-40 disabled:cursor-default">
+                          Mark all as seen
+                        </button>
+                        <button onClick={() => { markLowSeen(); setNotifOpen(false); navigate('/admin/inventory?stock=low'); }} className="text-xs text-forno-text-muted hover:text-[#FF6B35]">
+                          View low stock →
+                        </button>
                       </div>
                     </motion.div>
                   </>

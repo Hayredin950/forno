@@ -41,11 +41,21 @@ export interface IOrder extends Document {
   paymentStatus: "pending" | "paid" | "failed" | "refunded";
   paymentId: string | null;
   razorpayOrderId: string | null;
-  orderStatus: "Order Received" | "Approved" | "In Kitchen" | "Ready" | "Sent to Delivery" | "Delivered" | "Cancelled";
+  // Snapshot of who the delivery driver needs to reach (customer name +
+  // phone), captured when the order is placed so it survives profile edits.
+  customerName: string;
+  contactPhone: string;
+  orderStatus: "Order Received" | "In Kitchen" | "Sent to Delivery" | "Delivered" | "Cancelled";
   deliveryAddress: DeliveryAddress;
   statusHistory: IStatusEntry[];
   estimatedTime: Date;
   statusUpdatedAt: Date;
+  // Real road route (OSRM) captured when the order is placed: distance,
+  // driving duration and the polyline used to draw the tracking map. All
+  // zero/null when coordinates or routing are unavailable.
+  routeDistanceKm: number;
+  routeDurationMin: number;
+  routeGeometry: [number, number][] | null;
   createdAt: Date;
 }
 
@@ -94,17 +104,25 @@ const orderSchema = new Schema<IOrder>(
     paymentStatus: { type: String, default: "pending", enum: ["pending", "paid", "failed", "refunded"] },
     paymentId: { type: String, default: null },
     razorpayOrderId: { type: String, default: null },
+    // Clean 3-phase pipeline: Received → In Kitchen → Sent to Delivery →
+    // Delivered (Cancelled can be entered before dispatch). "Approved" and
+    // "Ready" were removed from the enum — they no longer exist.
     orderStatus: {
       type: String,
       default: "Order Received",
-      enum: ["Order Received", "Approved", "In Kitchen", "Ready", "Sent to Delivery", "Delivered", "Cancelled"],
+      enum: ["Order Received", "In Kitchen", "Sent to Delivery", "Delivered", "Cancelled"],
     },
+    customerName: { type: String, default: "" },
+    contactPhone: { type: String, default: "" },
     deliveryAddress: { type: deliveryAddressSchema, default: () => ({}) },
     statusHistory: {
       type: [{ status: String, timestamp: { type: Date, default: Date.now }, updatedBy: { type: String, default: "system" } }],
       default: [],
     },
     estimatedTime: { type: Date, default: null },
+    routeDistanceKm: { type: Number, default: 0 },
+    routeDurationMin: { type: Number, default: 0 },
+    routeGeometry: { type: [[Number, Number]], default: null },
     statusUpdatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true },

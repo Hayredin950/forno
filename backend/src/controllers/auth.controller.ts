@@ -1,7 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import crypto from "node:crypto";
-import { User } from "../models/User";
+import { User, type ISavedAddress } from "../models/User";
+import type { AuthUserRequest } from "../middleware/authUser";
 import { Admin } from "../models/Admin";
 import { generateUserToken, generateAdminToken } from "../utils/generateToken";
 import { logger } from "../lib/logger";
@@ -165,4 +166,66 @@ export const adminLogin = asyncHandler(async (req: Request, res: Response, next:
 
   const token = generateAdminToken(String(admin._id));
   sendSuccess(res, { token, admin: { id: admin._id, name: admin.name, email: admin.email } }, "Admin login successful");
+});
+
+// ─── Profile (phone + saved delivery addresses, editable by the user) ─────
+
+const sanitizeUser = (user: InstanceType<typeof User>) => ({
+  id: String(user._id),
+  name: user.name,
+  email: user.email,
+  phone: user.phone ?? "",
+  addresses: (user.addresses ?? []).map((a) => ({
+    _id: String(a._id ?? ""),
+    label: a.label ?? "",
+    street: a.street ?? "",
+    city: a.city ?? "",
+    state: a.state ?? "",
+    pincode: a.pincode ?? "",
+    lat: a.lat ?? undefined,
+    lng: a.lng ?? undefined,
+    isDefault: a.isDefault ?? false,
+  })),
+});
+
+/** Current user's profile — what the profile page and checkout prefill from. */
+export const getProfile = asyncHandler(async (req: AuthUserRequest, res: Response, next: NextFunction) => {
+  const user = await User.findById(req.userId);
+  if (!user) return next(new ApiError(404, "User not found"));
+  sendSuccess(res, { user: sanitizeUser(user) });
+});
+
+/** Update name / phone / saved addresses. Full replace of the addresses array. */
+export const updateProfile = asyncHandler(async (req: AuthUserRequest, res: Response, next: NextFunction) => {
+  const user = await User.findById(req.userId);
+  if (!user) return next(new ApiError(404, "User not found"));
+
+  const { name, phone, addresses } = req.body as {
+    name?: string;
+    phone?: string;
+    addresses?: ISavedAddress[];
+  };
+
+  if (name !== undefined && String(name).trim()) user.name = String(name).trim();
+  if (phone !== undefined) user.phone = String(phone).trim();
+
+  if (Array.isArray(addresses)) {
+    const clean: ISavedAddress[] = addresses.map((a) => ({
+      label: String(a.label ?? "Home").trim() || "Home",
+      street: String(a.street ?? "").trim(),
+      city: String(a.city ?? "").trim(),
+      state: String(a.state ?? "").trim(),
+      pincode: String(a.pincode ?? "").trim(),
+      lat: typeof a.lat === "number" ? a.lat : undefined,
+      lng: typeof a.lng === "number" ? a.lng : undefined,
+      isDefault: !!a.isDefault,
+    }));
+    // Keep at most one default address.
+    const hasDefault = clean.some((a) => a.isDefault);
+    if (!hasDefault && clean.length > 0) clean[0].isDefault = true;
+    user.addresses = clean;
+  }
+
+  await user.save();
+  sendSuccess(res, { user: sanitizeUser(user) }, "Profile updated");
 });

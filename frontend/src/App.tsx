@@ -12,6 +12,7 @@ import UserLayout from '@/pages/user/UserLayout';
 import MenuPage from '@/pages/user/MenuPage';
 import BuilderPage from '@/pages/user/BuilderPage';
 import CheckoutPage from '@/pages/user/CheckoutPage';
+import ProfilePage from '@/pages/user/ProfilePage';
 import OrderTrackingPage from '@/pages/user/OrderTrackingPage';
 import OrdersPage from '@/pages/user/OrdersPage';
 import AdminLoginPage from '@/pages/admin/AdminLoginPage';
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="builder" element={<BuilderPage />} />
             <Route path="pizza/:pizzaId" element={<PizzaDetailPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:orderId" element={<OrderTrackingPage />} />
           </Route>

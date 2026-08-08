@@ -4,19 +4,22 @@ import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
 
-const VALID_STATUSES = ["Order Received", "Approved", "In Kitchen", "Ready", "Sent to Delivery", "Delivered", "Cancelled"] as const;
+const VALID_STATUSES = ["Order Received", "In Kitchen", "Sent to Delivery", "Delivered", "Cancelled"] as const;
 type OrderStatus = (typeof VALID_STATUSES)[number];
 
-// Forward-only flow with kitchen-approval and ready-for-delivery phases;
-// Cancelled is a terminal state that can only be entered before dispatch.
+// Forward-only flow; Cancelled is a terminal state that can only be entered
+// before dispatch. "Approved" / "Ready" are legacy statuses that may still
+// exist on older orders — they are mapped forward so those orders can be
+// brought back into the clean pipeline, but they're no longer selectable.
 const CAN_TRANSITION: Record<string, string[]> = {
-  "Order Received": ["Approved", "Cancelled"],
-  Approved: ["In Kitchen", "Cancelled"],
-  "In Kitchen": ["Ready", "Cancelled"],
-  Ready: ["Sent to Delivery"],
+  "Order Received": ["In Kitchen", "Cancelled"],
+  "In Kitchen": ["Sent to Delivery", "Cancelled"],
   "Sent to Delivery": ["Delivered"],
   Delivered: [],
   Cancelled: [],
+  // Legacy (pre-3-phase-rollback) cleanup paths:
+  Approved: ["In Kitchen", "Cancelled"],
+  Ready: ["Sent to Delivery"],
 };
 
 export const getAllOrders = asyncHandler(async (req: Request, res: Response) => {
@@ -54,7 +57,7 @@ const sortMap: Record<string, Record<string, 1 | -1>> = {
       .sort(sortMap[sort] ?? { createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .populate("user", "name email"),
+      .populate("user", "name email phone"),
     Order.countDocuments(filter),
   ]);
 

@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, ChevronDown, ChevronUp, MapPin, ShoppingCart, Lock, X, ShieldCheck } from 'lucide-react';
-import { cartApi, orderApi, razorpayApi, siteConfigApi, type PricingConfig } from '@/services/api';
+import { CreditCard, ChevronDown, ChevronUp, MapPin, ShoppingCart, Lock, X, ShieldCheck, Loader2 } from 'lucide-react';
+import { cartApi, orderApi, razorpayApi, siteConfigApi, userApi, type PricingConfig, type DeliveryOrigin } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import CartItemImage from '@/components/shared/CartItemImage';
 import DeliveryMap, { type MapLocation } from '@/components/shared/DeliveryMap';
+import { fetchRoute, type RouteEstimate } from '@/lib/route';
 import type { CartItem, Order } from '@/types';
 
 export default function CheckoutPage() {
@@ -20,11 +21,13 @@ export default function CheckoutPage() {
   const [processing, setProcessing] = useState(false);
   const [card, setCard] = useState({ name: '', number: '4111 1111 1111 1111', expiry: '12/29', cvv: '123' });
   const [address, setAddress] = useState<{ street: string; city: string; state: string; pincode: string; lat?: number; lng?: number }>({ street: '', city: '', state: '', pincode: '' });
+  const [phone, setPhone] = useState('');
   const mapValue: MapLocation | null =
     address.lat !== undefined && address.lng !== undefined
       ? { lat: address.lat, lng: address.lng, street: address.street, city: address.city, state: address.state, pincode: address.pincode }
       : null;
   const handleMapChange = (loc: MapLocation) => {
+    interacted.current = true;
     setAddress(prev => ({
       ...prev,
       street: loc.street || prev.street,
@@ -41,11 +44,52 @@ export default function CheckoutPage() {
   // the page never shows NaN or ₹0 while the config is still fetching.
   const defaultPricing: PricingConfig = { customBasePrice: 200, taxRate: 0.05, deliveryFee: 40, freeDeliveryThreshold: 500 };
   const [pricing, setPricing] = useState<PricingConfig>(defaultPricing);
+  // Live "how far is the kitchen?" estimate, shown under the map once the
+  // customer pins a delivery location.
+  const [kitchen, setKitchen] = useState<DeliveryOrigin | null>(null);
+  const [routeInfo, setRouteInfo] = useState<RouteEstimate | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
 
   useEffect(() => { loadCart(); }, []);
   useEffect(() => {
     siteConfigApi.get().then((res) => {
-      if (res.success) setPricing(res.data.pricing);
+      if (res.success) {
+        setPricing(res.data.pricing);
+        setKitchen(res.data.deliveryOrigin);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Ask the routing service for the real road distance once a map location is
+  // picked (and the kitchen is configured). Falls back gracefully on failure.
+  useEffect(() => {
+    if (!kitchen || kitchen.lat === 0 || kitchen.lng === 0 || address.lat === undefined || address.lng === undefined) {
+      setRouteInfo(null);
+      return;
+    }
+    let alive = true;
+    setRouteLoading(true);
+    fetchRoute({ lat: kitchen.lat, lng: kitchen.lng }, { lat: address.lat, lng: address.lng }).then((r) => {
+      if (!alive) return;
+      setRouteInfo(r);
+      setRouteLoading(false);
+    });
+    return () => { alive = false; };
+  }, [kitchen, address.lat, address.lng]);
+
+  // Prefill from the profile: default saved address + phone (so the rider can
+  // reach the customer). Both remain editable right here. The guard ensures a
+  // slow profile fetch never overwrites something the user already typed.
+  const interacted = useRef(false);
+  const markInteracted = () => { interacted.current = true; };
+  useEffect(() => {
+    userApi.getMe().then((res) => {
+      if (!res.success || interacted.current) return;
+      setPhone(res.data.user.phone ?? '');
+      const def = (res.data.user.addresses ?? []).find(a => a.isDefault) ?? res.data.user.addresses?.[0];
+      if (def) {
+        setAddress(p => ({ ...p, street: def.street, city: def.city, state: def.state, pincode: def.pincode, lat: def.lat, lng: def.lng }));
+      }
     }).catch(() => {});
   }, []);
 
@@ -89,6 +133,7 @@ export default function CheckoutPage() {
       const orderRes = await orderApi.create({
         items: cartItems,
         deliveryAddress: address,
+        contactPhone: phone,
       });
 
       if (orderRes.success) {
@@ -252,8 +297,20 @@ export default function CheckoutPage() {
           <h3 className="font-semibold text-forno-text-primary">Delivery Address</h3>
         </div>
         <DeliveryMap value={mapValue} onChange={handleMapChange} height={280} />
+        {(routeInfo || routeLoading) && (
+          <p className="flex items-center gap-2 text-xs text-forno-text-muted mt-2">
+            {routeLoading ? (
+              <><Loader2 size={13} className="animate-spin" /> Estimating distance…</>
+            ) : (
+              <><MapPin size={13} className="text-[#FF6B35]" /> Kitchen is <span className="text-forno-text-primary font-medium">≈ {routeInfo!.distanceKm} km</span> away — about <span className="text-forno-text-primary font-medium">{routeInfo!.durationMin} min</span> driving</>
+            )}
+          </p>
+        )}
         <div className="space-y-3">
-          <input type="text" value={address.street} onChange={e => setAddress(p => ({ ...p, street: e.target.value }))}
+          <input type="tel" value={phone} onChange={e => { markInteracted(); setPhone(e.target.value); }}
+            className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-3 text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50 text-sm"
+            placeholder="Phone number (for the delivery rider)" />
+          <input type="text" value={address.street} onChange={e => { markInteracted(); setAddress(p => ({ ...p, street: e.target.value })); }}
             className="w-full bg-forno-bg-tertiary border border-forno-border rounded-lg px-4 py-3 text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50 text-sm"
             placeholder="Street address" />
           <div className="grid grid-cols-3 gap-3">
