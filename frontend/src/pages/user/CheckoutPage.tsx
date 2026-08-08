@@ -6,7 +6,7 @@ import { cartApi, orderApi, razorpayApi, siteConfigApi, userApi, type PricingCon
 import { useToast } from '@/components/shared/Toaster';
 import CartItemImage from '@/components/shared/CartItemImage';
 import DeliveryMap, { type MapLocation } from '@/components/shared/DeliveryMap';
-import { fetchRoute, type RouteEstimate } from '@/lib/route';
+import { fetchRoute, hasCoords, type RouteEstimate } from '@/lib/route';
 import type { CartItem, Order } from '@/types';
 
 export default function CheckoutPage() {
@@ -23,8 +23,8 @@ export default function CheckoutPage() {
   const [address, setAddress] = useState<{ street: string; city: string; state: string; pincode: string; lat?: number; lng?: number }>({ street: '', city: '', state: '', pincode: '' });
   const [phone, setPhone] = useState('');
   const mapValue: MapLocation | null =
-    address.lat !== undefined && address.lng !== undefined
-      ? { lat: address.lat, lng: address.lng, street: address.street, city: address.city, state: address.state, pincode: address.pincode }
+    hasCoords(address.lat, address.lng)
+      ? { lat: address.lat!, lng: address.lng!, street: address.street, city: address.city, state: address.state, pincode: address.pincode }
       : null;
   const handleMapChange = (loc: MapLocation) => {
     interacted.current = true;
@@ -63,13 +63,14 @@ export default function CheckoutPage() {
   // Ask the routing service for the real road distance once a map location is
   // picked (and the kitchen is configured). Falls back gracefully on failure.
   useEffect(() => {
-    if (!kitchen || kitchen.lat === 0 || kitchen.lng === 0 || address.lat === undefined || address.lng === undefined) {
+    if (!kitchen || !hasCoords(kitchen.lat, kitchen.lng) || !hasCoords(address.lat, address.lng)) {
       setRouteInfo(null);
       return;
     }
     let alive = true;
     setRouteLoading(true);
-    fetchRoute({ lat: kitchen.lat, lng: kitchen.lng }, { lat: address.lat, lng: address.lng }).then((r) => {
+    // hasCoords validated these above — the assertions are safe.
+    fetchRoute({ lat: kitchen.lat, lng: kitchen.lng }, { lat: address.lat!, lng: address.lng! }).then((r) => {
       if (!alive) return;
       setRouteInfo(r);
       setRouteLoading(false);

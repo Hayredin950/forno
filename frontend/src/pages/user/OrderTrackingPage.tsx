@@ -8,7 +8,7 @@ import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
 import CustomBuildDetails from '@/components/shared/CustomBuildDetails';
 import RouteMap from '@/components/shared/RouteMap';
 import { useOrderMaps, customBuildSummary } from '@/lib/orderItems';
-import { haversineKm } from '@/lib/route';
+import { haversineKm, hasCoords } from '@/lib/route';
 import type { Order } from '@/types';
 
 const STATUS_STEPS: { status: string; label: string; icon: typeof ClipboardCheck; color: string }[] = [
@@ -80,14 +80,16 @@ export default function OrderTrackingPage() {
   };
 
   // Route map inputs: kitchen (admin-set) → the customer's picked location.
+  // hasCoords rejects null/NaN/0 — legacy orders stored lat/lng as null and
+  // would otherwise crash the Leaflet map with invalid bounds.
   const origin =
-    kitchen && kitchen.lat !== 0 && kitchen.lng !== 0
+    kitchen && hasCoords(kitchen.lat, kitchen.lng)
       ? { lat: kitchen.lat, lng: kitchen.lng, label: kitchen.label || 'Forno Kitchen' }
       : null;
+  const addr = order?.deliveryAddress;
   const dest =
-    order?.deliveryAddress.lat !== undefined && order?.deliveryAddress.lng !== undefined &&
-    order?.deliveryAddress.lat !== 0 && order?.deliveryAddress.lng !== 0
-      ? { lat: order.deliveryAddress.lat, lng: order.deliveryAddress.lng, label: 'Your address' }
+    addr && hasCoords(addr.lat, addr.lng)
+      ? { lat: addr.lat!, lng: addr.lng!, label: 'Your address' }
       : null;
   // Real route distance if the backend captured it, else a straight-line estimate.
   const displayKm =

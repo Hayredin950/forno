@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { pointAtFraction } from '@/lib/route';
+import { pointAtFraction, hasCoords } from '@/lib/route';
 
 export interface RouteMapPoint {
   lat: number;
@@ -47,10 +47,17 @@ export default function RouteMap({ origin, destination, route, courier = 'hidden
   const courierRef = useRef<L.Marker | null>(null);
   const pathRef = useRef<[number, number][]>([]);
 
-  // Build once on mount (both points are guaranteed present by the caller).
+  // Legacy orders can carry lat/lng = null (or 0). Leaflet throws on invalid
+  // bounds, so validate up front and render a fallback instead of a map.
+  const valid =
+    !!origin && !!destination &&
+    hasCoords(origin.lat, origin.lng) && hasCoords(destination.lat, destination.lng);
+
+  // Build once on mount (validity is checked again so the map can never be
+  // initialized with bad coordinates).
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !origin || !destination || mapRef.current) return;
+    if (!el || !valid || mapRef.current) return;
 
     const map = L.map(el, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -62,7 +69,11 @@ export default function RouteMap({ origin, destination, route, courier = 'hidden
     L.marker([origin.lat, origin.lng], { icon: originIcon }).addTo(map).bindPopup(origin.label ?? 'Kitchen');
     L.marker([destination.lat, destination.lng], { icon: destIcon }).addTo(map).bindPopup(destination.label ?? 'Delivery');
 
-    const path = (route && route.length >= 2 ? route : [[origin.lat, origin.lng], [destination.lat, destination.lng]]) as [number, number][];
+    // Keep only real points (a malformed stored route must never reach
+    // fitBounds) and fall back to a straight line when the route is missing.
+    const path = (route && route.length >= 2 ? route : [[origin.lat, origin.lng], [destination.lat, destination.lng]])
+      .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1])) as [number, number][];
+    if (path.length < 2) return;
     pathRef.current = path;
 
     L.polyline(path, { color: '#FF6B35', weight: 4, opacity: 0.9, dashArray: '8 8' }).addTo(map);
@@ -78,8 +89,10 @@ export default function RouteMap({ origin, destination, route, courier = 'hidden
       courierRef.current = null;
       pathRef.current = [];
     };
+    // `valid` is in deps so the map (re)initializes if coordinates change in
+    // place; the mapRef guard keeps this idempotent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [valid]);
 
   // Ride the courier along the polyline when the order goes out for delivery.
   useEffect(() => {
@@ -108,12 +121,19 @@ export default function RouteMap({ origin, destination, route, courier = 'hidden
     return () => cancelAnimationFrame(raf);
   }, [courier]);
 
-  return (
+  return valid ? (
     <div
       ref={containerRef}
       className="relative z-0 w-full overflow-hidden rounded-xl border border-forno-border"
       style={{ height }}
       aria-label="Delivery route map"
     />
+  ) : (
+    <div
+      className="w-full rounded-xl border border-forno-border bg-forno-bg-tertiary flex items-center justify-center px-6"
+      style={{ height }}
+    >
+      <p className="text-xs text-center text-forno-text-muted">Delivery coordinates unavailable for this order.</p>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { User as UserIcon, Phone, MapPin, Plus, Trash2, Star, Save, Pencil, X } from 'lucide-react';
 import { userApi, type ProfileAddress } from '@/services/api';
 import DeliveryMap, { type MapLocation } from '@/components/shared/DeliveryMap';
+import { hasCoords } from '@/lib/route';
 import { useToast } from '@/components/shared/Toaster';
 
 const emptyAddress: ProfileAddress = { label: 'Home', street: '', city: '', state: '', pincode: '', isDefault: false };
@@ -69,7 +70,7 @@ export default function ProfilePage() {
   const saveAddress = () => {
     // A street is always required; city is only required when the address
     // wasn't pinned on the map (Nominatim may not return a city in rural areas).
-    const pinned = draft.lat !== undefined && draft.lng !== undefined;
+    const pinned = hasCoords(draft.lat, draft.lng);
     if (!draft.street.trim() || (!draft.city.trim() && !pinned)) {
       toast(pinned ? 'Street address is required' : 'Street and city are required', 'warning');
       return;
@@ -102,8 +103,8 @@ export default function ProfilePage() {
   };
 
   const mapValue: MapLocation | null =
-    draft.lat !== undefined && draft.lng !== undefined
-      ? { lat: draft.lat, lng: draft.lng, street: draft.street, city: draft.city, state: draft.state, pincode: draft.pincode }
+    hasCoords(draft.lat, draft.lng)
+      ? { lat: draft.lat!, lng: draft.lng!, street: draft.street, city: draft.city, state: draft.state, pincode: draft.pincode }
       : null;
 
   if (!loaded) {
@@ -203,8 +204,8 @@ export default function ProfilePage() {
                     )}
                   </div>
                   <p className="text-xs text-forno-text-secondary truncate">{a.street}, {a.city} {a.state} — {a.pincode}</p>
-                  {a.lat !== undefined && a.lng !== undefined && (
-                    <p className="text-[10px] font-mono text-forno-text-muted mt-0.5">{a.lat.toFixed(4)}, {a.lng.toFixed(4)}</p>
+                  {hasCoords(a.lat, a.lng) && (
+                    <p className="text-[10px] font-mono text-forno-text-muted mt-0.5">{a.lat?.toFixed(4)}, {a.lng?.toFixed(4)}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

@@ -15,6 +15,16 @@ export interface RoutePoint {
   lng: number;
 }
 
+/**
+ * True when a point has real, usable coordinates. `null`, `NaN`, strings and
+ * the (0,0) default all count as "not configured" — legacy orders stored
+ * lat/lng as null, which used to sneak past `!== undefined` checks and crash
+ * the Leaflet map with invalid bounds.
+ */
+export const hasCoords = (lat: unknown, lng: unknown): boolean =>
+  typeof lat === 'number' && typeof lng === 'number' &&
+  Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
+
 export const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
   const R = 6371;
   const toRad = (d: number) => (d * Math.PI) / 180;

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Bike, Package, CheckCircle2, MapPin, Phone, Clock, ArrowRight } from 'lucide-react';
 import { adminOrderApi, siteConfigApi, type DeliveryOrigin } from '@/services/api';
 import RouteMap from '@/components/shared/RouteMap';
+import { hasCoords } from '@/lib/route';
 import { useToast } from '@/components/shared/Toaster';
 import type { Order } from '@/types';
 
@@ -88,7 +89,7 @@ export default function AdminCourier() {
   };
 
   const origin =
-    kitchen && kitchen.lat !== 0 && kitchen.lng !== 0
+    kitchen && hasCoords(kitchen.lat, kitchen.lng)
       ? { lat: kitchen.lat, lng: kitchen.lng, label: kitchen.label || 'Forno Kitchen' }
       : null;
 
@@ -133,11 +134,10 @@ export default function AdminCourier() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             {active.map((order, i) => {
               const dispatchedAt = order.statusHistory.find(h => h.status === 'delivery')?.timestamp;
-              const dest =
-                order.deliveryAddress.lat !== undefined && order.deliveryAddress.lng !== undefined &&
-                order.deliveryAddress.lat !== 0 && order.deliveryAddress.lng !== 0
-                  ? { lat: order.deliveryAddress.lat, lng: order.deliveryAddress.lng, label: 'Customer' }
-                  : null;
+              const addr = order.deliveryAddress;
+              const dest = addr && hasCoords(addr.lat, addr.lng)
+                ? { lat: addr.lat!, lng: addr.lng!, label: 'Customer' }
+                : null;
               const eta = countdown(new Date(order.estimatedTime).getTime() - now);
 
               return (

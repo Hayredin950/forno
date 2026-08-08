@@ -222,6 +222,15 @@ function mapOrder(o: any): Order {
   const userPhone = user?.phone ?? '';
   const userId = user?._id ? String(user._id) : typeof user === 'string' ? user : '';
 
+  // Legacy orders stored deliveryAddress lat/lng as null (schema default) or
+  // 0 — normalize those to undefined so every downstream coordinate check
+  // behaves the same and nothing ever hands nulls to the Leaflet map.
+  const addrRaw = o.deliveryAddress ?? {};
+  const addrNum = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) && n !== 0 ? n : undefined;
+  };
+
   const rawHistory = Array.isArray(o.statusHistory) && o.statusHistory.length > 0
     ? o.statusHistory
     : [{ status: o.orderStatus ?? 'Order Received', timestamp: o.statusUpdatedAt ?? o.createdAt }];
@@ -246,7 +255,14 @@ function mapOrder(o: any): Order {
       status: o.paymentStatus === 'paid' ? 'completed' : o.paymentStatus === 'failed' ? 'failed' : o.paymentStatus === 'refunded' ? 'failed' : 'pending',
       amount: total,
     },
-    deliveryAddress: o.deliveryAddress ?? { street: '', city: '', state: '', pincode: '' },
+    deliveryAddress: {
+      street: addrRaw.street ?? '',
+      city: addrRaw.city ?? '',
+      state: addrRaw.state ?? '',
+      pincode: addrRaw.pincode ?? '',
+      lat: addrNum(addrRaw.lat),
+      lng: addrNum(addrRaw.lng),
+    },
     estimatedTime: o.estimatedTime
       ? new Date(o.estimatedTime).toISOString()
       : (() => {
