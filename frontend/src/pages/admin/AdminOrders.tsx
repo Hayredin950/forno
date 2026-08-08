@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MoreHorizontal, ChevronLeft, ChevronRight, X, MapPin, Clock, CheckCircle2 } from 'lucide-react';
+import { Search, MoreHorizontal, ChevronLeft, ChevronRight, X, MapPin, Clock, CheckCircle2, RotateCcw } from 'lucide-react';
 import { adminOrderApi } from '@/services/api';
 import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
 import CustomBuildDetails from '@/components/shared/CustomBuildDetails';
@@ -25,6 +25,10 @@ const CAN_TRANSITION: Record<OrderStatus, OrderStatus[]> = {
   completed: [],
   cancelled: ['received'],
 };  const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// An order was reopened after a cancellation if any timeline entry carries a
+// note (stamped by the backend when a cancelled order returns to Received).
+const isReopened = (order: Order) => (order.statusHistory ?? []).some(h => h.note);
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -88,7 +92,13 @@ export default function AdminOrders() {
       setDetailOrder(d => d && d._id === orderId ? {
         ...d,
         status,
-        statusHistory: [...(d.statusHistory ?? []), { status, timestamp: new Date().toISOString(), updatedBy: 'admin' }],
+        statusHistory: [...(d.statusHistory ?? []), {
+          status,
+          timestamp: new Date().toISOString(),
+          updatedBy: 'admin',
+          // Keep the modal in sync instantly when reopening, before the refetch.
+          ...(status === 'received' && d.status === 'cancelled' ? { note: 'Reopened after cancellation' } : {}),
+        }],
       } : d);
     } catch (e) {
       toast((e as Error).message || 'Failed to update status', 'error');
@@ -148,10 +158,18 @@ export default function AdminOrders() {
                   </td>
                   <td className="px-4 py-3.5 font-mono text-sm text-forno-text-primary text-right">₹{order.total.toFixed(0)}</td>
                   <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                    <button onClick={e => openMenu(e, order._id)}
-                      className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold ${statusColors[order.status]} cursor-pointer hover:opacity-80 transition-opacity`}>
-                      {statusLabel(order.status)}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={e => openMenu(e, order._id)}
+                        className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold ${statusColors[order.status]} cursor-pointer hover:opacity-80 transition-opacity`}>
+                        {statusLabel(order.status)}
+                      </button>
+                      {isReopened(order) && (
+                        <span title="Reopened after cancellation"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-pill text-[10px] font-semibold bg-[#F7931E]/15 text-[#F7931E]">
+                          <RotateCcw size={10} /> Reopened
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-forno-text-muted whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3.5"><button onClick={() => setDetailOrder(order)} className="text-forno-text-muted hover:text-[#FF6B35]"><MoreHorizontal size={16} /></button></td>
@@ -270,9 +288,22 @@ export default function AdminOrders() {
                   <div className="bg-forno-bg-tertiary/50 border border-forno-border rounded-lg p-4">
                     <p className="text-xs uppercase tracking-wide text-forno-text-muted mb-2 flex items-center gap-1.5"><Clock size={12} /> Timeline</p>
                     {(detailOrder.statusHistory ?? []).map((h, i) => (
-                      <p key={i} className="text-xs text-forno-text-secondary mb-1">
-                        <span className="text-forno-text-primary">{statusLabel(h.status)}</span> — {new Date(h.timestamp).toLocaleString()}
-                      </p>
+                      <div key={i} className="flex items-start gap-2 mb-1.5 text-xs text-forno-text-secondary">
+                        {h.note ? (
+                          <RotateCcw size={12} className="text-[#F7931E] mt-0.5 shrink-0" />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-forno-text-muted mt-1.5 shrink-0" />
+                        )}
+                        <span className="flex-1 min-w-0">
+                          <span className="text-forno-text-primary">{statusLabel(h.status)}</span>
+                          {h.note && (
+                            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-pill text-[10px] font-semibold bg-[#F7931E]/15 text-[#F7931E] align-middle">
+                              <RotateCcw size={10} /> Reopened
+                            </span>
+                          )}
+                          <span className="ml-2 text-forno-text-muted">{new Date(h.timestamp).toLocaleString()}</span>
+                        </span>
+                      </div>
                     ))}
                     {!detailOrder.statusHistory?.length && <p className="text-xs text-forno-text-muted">Placed {new Date(detailOrder.createdAt).toLocaleString()}</p>}
                   </div>

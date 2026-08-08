@@ -240,6 +240,7 @@ function mapOrder(o: any): Order {
       status: STATUS_BE_TO_FE[h.status] ?? h.status,
       timestamp: h.timestamp ?? o.createdAt ?? new Date().toISOString(),
       updatedBy: h.updatedBy ?? 'system',
+      note: h.note ?? '',
     })),
     payment: {
       status: o.paymentStatus === 'paid' ? 'completed' : o.paymentStatus === 'failed' ? 'failed' : o.paymentStatus === 'refunded' ? 'failed' : 'pending',

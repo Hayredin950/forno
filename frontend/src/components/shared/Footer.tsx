@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Flame, Mail, Phone, Check } from 'lucide-react';
+import { Mail, Phone, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { siteConfigApi, newsletterApi, type SiteConfigData } from '@/services/api';
 
@@ -50,9 +50,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
           <div>
             <Link to="/" className="flex items-center gap-1 mb-4">
-              <span className="text-lg font-semibold tracking-[0.1em] text-forno-text-primary">
-                FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={9} /></span></span>
-              </span>
+              <img src="/logo.png" alt="Forno" className="h-8 w-8 rounded-lg" />
             </Link>
             <p className="text-xs uppercase tracking-[0.08em] text-forno-text-muted mb-6">Fire. Dough. Perfection.</p>
             {config?.contactPhone && (

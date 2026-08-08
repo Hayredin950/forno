@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { Order } from "../models/Order";
-import { checkStockAvailability } from "../services/stock.service";
+import { checkStockAvailability, decrementStockForOrder, restoreStockForOrder } from "../services/stock.service";
 import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -83,21 +83,44 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
     if (!allowed.includes(orderStatus)) {
       return next(new ApiError(400, `Cannot move order from "${order.orderStatus}" to "${orderStatus}"`));
     }
-  }
 
-  // Reopening a cancelled order: stock was already committed (or held) for it,
-  // so don't let an unfulfillable order back into the kitchen.
-  if (orderStatus === "Order Received" && order.orderStatus === "Cancelled") {
-    const stockCheck = await checkStockAvailability(order.items);
-    if (!stockCheck.available) {
-      return next(new ApiError(409, `Cannot reopen: ${stockCheck.shortfall ?? "insufficient stock"}`));
+    // Cancelling a PAID order: it already consumed stock at payment time, so
+    // hand that stock back to inventory (once — guarded by stockRestored).
+    if (orderStatus === "Cancelled" && order.paymentStatus === "paid" && !order.stockRestored) {
+      await restoreStockForOrder(order.items);
+      order.stockRestored = true;
+    }
+
+    // Reopening a cancelled order: stock was already committed (or held) for it,
+    // so don't let an unfulfillable order back into the kitchen.
+    if (orderStatus === "Order Received" && order.orderStatus === "Cancelled") {
+      const stockCheck = await checkStockAvailability(order.items);
+      if (!stockCheck.available) {
+        return next(new ApiError(409, `Cannot reopen: ${stockCheck.shortfall ?? "insufficient stock"}`));
+      }
+      // If this order's stock was returned on cancellation, commit it again.
+      // (Legacy cancelled orders that predate restore keep stock held — the
+      // flag stays false and nothing is double-committed.)
+      if (order.stockRestored) {
+        await decrementStockForOrder(order.items, String(order._id));
+        order.stockRestored = false;
+      }
     }
   }
 
+  const prevStatus = order.orderStatus;
   order.orderStatus = orderStatus;
   order.statusUpdatedAt = new Date();
   if (orderStatus === "Delivered") order.estimatedTime = new Date();
-  order.statusHistory.push({ status: orderStatus, timestamp: new Date(), updatedBy: "admin" });
+  // Mark reopen transitions in the timeline so staff can see the order was
+  // brought back after a cancellation (drives the admin UI marker).
+  const reopened = orderStatus === "Order Received" && prevStatus === "Cancelled";
+  order.statusHistory.push({
+    status: orderStatus,
+    timestamp: new Date(),
+    updatedBy: "admin",
+    ...(reopened ? { note: "Reopened after cancellation" } : {}),
+  });
   await order.save();
 
   sendSuccess(res, { orderId: order._id, orderStatus: order.orderStatus, statusUpdatedAt: order.statusUpdatedAt });

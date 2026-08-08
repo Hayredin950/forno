@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, Menu, X, Flame, LogOut, User } from 'lucide-react';
+import { ShoppingCart, Menu, X, LogOut, User } from 'lucide-react';
 import { authApi, cartApi } from '@/services/api';
 
 export default function Navbar() {
@@ -53,9 +53,7 @@ export default function Navbar() {
       >
         <div className="max-w-7xl mx-auto px-6 lg:px-12 h-full flex items-center justify-between">
           <Link to="/" className="flex items-center gap-1 group">
-            <span className="text-xl font-semibold tracking-[0.1em] text-forno-text-primary" style={{ fontFamily: 'Inter' }}>
-              FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={10} /></span></span>
-            </span>
+            <img src="/logo.png" alt="Forno" className="h-8 w-8 rounded-lg" />
           </Link>
 
           {!isAuthPage && (

@@ -112,6 +112,38 @@ export const decrementStockForOrder = async (
   }
 };
 
+/**
+ * Return stock to inventory for a cancelled order. Mirrors
+ * decrementStockForOrder: each ingredient the order consumed gets its
+ * quantity added back, `isAvailable` is re-enabled once stock is back
+ * above zero, and every change is logged with reason "cancel". No
+ * conditional guard is needed here — restoring can't oversell.
+ */
+export const restoreStockForOrder = async (items: IOrderItem[]): Promise<void> => {
+  const updates: Array<{ id: string; qty: number }> = [];
+  for (const item of items) {
+    const qty = item.quantity;
+    const ids = await ingredientIdsForItem(item);
+    for (const id of ids) updates.push({ id, qty });
+  }
+
+  for (const { id, qty } of updates) {
+    const ing = await Ingredient.findByIdAndUpdate(id, { $inc: { currentStock: qty } }, { new: true });
+    // Ingredient may have been deleted since the order was placed — skip it.
+    if (!ing) continue;
+    if (ing.currentStock > 0 && !ing.isAvailable) {
+      await Ingredient.updateOne({ _id: id }, { isAvailable: true });
+    }
+    await StockLog.create({
+      ingredient: id,
+      changeAmount: qty,
+      reason: "cancel",
+      adminId: null,
+      timestamp: new Date(),
+    });
+  }
+};
+
 // Keep the session-based API shape available (used only where the caller
 // opted into transactions) without breaking existing imports.
 export const supportsTransactions = (): boolean => !!mongoose.connection.replset;

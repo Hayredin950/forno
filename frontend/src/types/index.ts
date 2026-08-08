@@ -95,7 +95,7 @@ export interface Order {
   deliveryFee: number;
   total: number;
   status: 'received' | 'kitchen' | 'delivery' | 'completed' | 'cancelled';
-  statusHistory: { status: string; timestamp: string; updatedBy: string }[];
+  statusHistory: { status: string; timestamp: string; updatedBy: string; note?: string }[];
   userPhone?: string;
   contactPhone?: string;
   payment: {

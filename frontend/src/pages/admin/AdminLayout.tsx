@@ -1,9 +1,21 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users, Settings, Bike, Check } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Pizza, Users, Settings, Bike, Check, Clock } from 'lucide-react';
 import { authApi, inventoryApi, adminOrderApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 import type { InventoryItem, Order } from '@/types';
+
+// Relative "when was this acknowledged" label for the read-alert list.
+const formatReadAt = (iso: string): string => {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return 'Read earlier'; // legacy seen alert, no recorded time
+  const mins = Math.floor(Math.max(0, Date.now() - t) / 60000);
+  if (mins < 1) return 'Read just now';
+  if (mins < 60) return `Read ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Read ${hrs}h ago`;
+  return `Read on ${new Date(iso).toLocaleDateString()}`;
+};
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
@@ -27,11 +39,21 @@ export default function AdminLayout() {
   const [seenKeys, setSeenKeys] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('forno_admin_seen_alerts') ?? '[]')); } catch { return new Set(); }
   });
+  // Read-acknowledgement timestamps: alert key → ISO time it was marked read,
+  // shown in the dropdown so the admin can see when each alert was handled.
+  // (Kept in a separate key so existing seen-alert data stays intact.)
+  const [readAt, setReadAt] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('forno_admin_read_alerts') ?? '{}'); } catch { return {}; }
+  });
   const admin = authApi.getCurrentAdmin();
 
   useEffect(() => {
     localStorage.setItem('forno_admin_seen_alerts', JSON.stringify([...seenKeys]));
   }, [seenKeys]);
+
+  useEffect(() => {
+    localStorage.setItem('forno_admin_read_alerts', JSON.stringify(readAt));
+  }, [readAt]);
 
   // Real notifications: inventory below its alert threshold + fresh orders.
   useEffect(() => {
@@ -63,11 +85,42 @@ export default function AdminLayout() {
     ...newOrders.map(order => ({ key: `order:${order._id}` })),
   ];
 
-  const markSeen = (key: string) => setSeenKeys(prev => new Set(prev).add(key));
-  const markAllSeen = () => setSeenKeys(prev => new Set([...prev, ...alerts.map(a => a.key)]));
+  // Acknowledge = hide from the unread list AND record when it was handled.
+  const markSeen = (key: string) => {
+    setSeenKeys(prev => new Set(prev).add(key));
+    setReadAt(prev => ({ ...prev, [key]: new Date().toISOString() }));
+  };
+  const markAllSeen = () => {
+    setSeenKeys(prev => new Set([...prev, ...alerts.map(a => a.key)]));
+    setReadAt(prev => {
+      const next = { ...prev };
+      for (const a of alerts) if (!next[a.key]) next[a.key] = new Date().toISOString();
+      return next;
+    });
+  };
   // Heading to inventory: only acknowledge the low-stock alerts, never the
   // order alerts (those still need the admin's attention).
-  const markLowSeen = () => setSeenKeys(prev => new Set([...prev, ...lowStock.map(item => `low:${item._id}`)]));
+  const markLowSeen = () => {
+    setSeenKeys(prev => new Set([...prev, ...lowStock.map(item => `low:${item._id}`)]));
+    setReadAt(prev => {
+      const next = { ...prev };
+      for (const item of lowStock) {
+        const k = `low:${item._id}`;
+        if (!next[k]) next[k] = new Date().toISOString();
+      }
+      return next;
+    });
+  };
+
+  // Acknowledged alerts, most-recently-read first (capped so the dropdown
+  // never grows unbounded).
+  const readAlerts = [
+    ...lowStock.map(item => ({ key: `low:${item._id}`, title: item.name, meta: `${item.currentStock} left` })),
+    ...newOrders.map(order => ({ key: `order:${order._id}`, title: order.orderId, meta: `₹${order.total.toFixed(0)}` })),
+  ]
+    .filter(a => seenKeys.has(a.key))
+    .sort((a, b) => String(readAt[b.key] ?? '').localeCompare(String(readAt[a.key] ?? '')))
+    .slice(0, 10);
 
   const handleLogout = () => {
     authApi.adminLogout();
@@ -81,9 +134,9 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="hidden lg:flex w-[280px] bg-forno-bg-primary border-r border-forno-border flex-col fixed h-screen">
         <div className="p-5 pb-4 border-b border-forno-border">
-          <div className="flex items-center gap-1 text-lg font-semibold tracking-[0.1em] text-forno-text-primary">
-            FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={9} /></span></span>
-            <span className="ml-2 text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="Forno" className="h-8 w-8 rounded-lg" />
+            <span className="text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
           </div>
         </div>
 
@@ -178,7 +231,21 @@ export default function AdminLayout() {
                             ))}
                           </div>
                         )}
-                        {alertCount === 0 && (
+                        {readAlerts.length > 0 && (
+                          <div className="px-4 py-2 border-t border-forno-border">
+                            <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5 flex items-center gap-1"><Clock size={10} /> Read earlier</p>
+                            {readAlerts.map(a => (
+                              <div key={a.key} className="flex items-center justify-between gap-2 px-1 py-1 rounded-lg">
+                                <span className="text-sm text-forno-text-muted truncate">
+                                  {a.title}
+                                  {a.meta && <span className="ml-1.5 text-[10px] text-forno-text-muted/70">{a.meta}</span>}
+                                </span>
+                                <span className="text-[10px] text-forno-text-muted shrink-0">{formatReadAt(readAt[a.key] ?? '')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {alertCount === 0 && readAlerts.length === 0 && (
                           <p className="px-4 py-8 text-center text-sm text-forno-text-muted">All caught up — no alerts 🎉</p>
                         )}
                       </div>

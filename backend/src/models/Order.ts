@@ -29,6 +29,10 @@ export interface IStatusEntry {
   status: string;
   timestamp: Date;
   updatedBy: string;
+  // Optional marker shown in the admin timeline (e.g. "Reopened after
+  // cancellation") so staff can tell a restore/reopen apart from a normal
+  // transition.
+  note?: string;
 }
 
 export interface IOrder extends Document {
@@ -46,6 +50,10 @@ export interface IOrder extends Document {
   customerName: string;
   contactPhone: string;
   orderStatus: "Order Received" | "In Kitchen" | "Sent to Delivery" | "Delivered" | "Cancelled";
+  // True once the order's committed stock has been returned to inventory
+  // (set when a paid order is cancelled, cleared when it's reopened). Guards
+  // the restore/re-commit so it can never happen twice for the same order.
+  stockRestored: boolean;
   deliveryAddress: DeliveryAddress;
   statusHistory: IStatusEntry[];
   estimatedTime: Date;
@@ -112,11 +120,13 @@ const orderSchema = new Schema<IOrder>(
       default: "Order Received",
       enum: ["Order Received", "In Kitchen", "Sent to Delivery", "Delivered", "Cancelled"],
     },
+    // See the interface note above — used to make stock restore idempotent.
+    stockRestored: { type: Boolean, default: false },
     customerName: { type: String, default: "" },
     contactPhone: { type: String, default: "" },
     deliveryAddress: { type: deliveryAddressSchema, default: () => ({}) },
     statusHistory: {
-      type: [{ status: String, timestamp: { type: Date, default: Date.now }, updatedBy: { type: String, default: "system" } }],
+      type: [{ status: String, timestamp: { type: Date, default: Date.now }, updatedBy: { type: String, default: "system" }, note: { type: String, default: null } }],
       default: [],
     },
     estimatedTime: { type: Date, default: null },

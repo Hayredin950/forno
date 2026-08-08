@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Flame, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import { passwordApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 
@@ -57,8 +57,8 @@ export default function ResetPasswordPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="glass-card-elevated p-8 lg:p-10">
           <div className="text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-1 text-xl font-semibold tracking-[0.1em] text-forno-text-primary" style={{ fontFamily: 'Inter' }}>
-              FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={10} /></span></span>
+            <Link to="/" className="inline-flex items-center gap-1">
+              <img src="/logo.png" alt="Forno" className="h-10 w-10 rounded-lg" />
             </Link>
           </div>
 
