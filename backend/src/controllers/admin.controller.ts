@@ -4,21 +4,23 @@ import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
 
-const VALID_STATUSES = ["Order Received", "In Kitchen", "Sent to Delivery", "Delivered", "Cancelled"] as const;
+const VALID_STATUSES = ["Order Received", "Approved", "In Kitchen", "Ready", "Sent to Delivery", "Delivered", "Cancelled"] as const;
 type OrderStatus = (typeof VALID_STATUSES)[number];
 
-// Forward-only flow; Cancelled is a terminal state that can only be entered
-// before the order is out for delivery.
+// Forward-only flow with kitchen-approval and ready-for-delivery phases;
+// Cancelled is a terminal state that can only be entered before dispatch.
 const CAN_TRANSITION: Record<string, string[]> = {
-  "Order Received": ["In Kitchen", "Cancelled"],
-  "In Kitchen": ["Sent to Delivery", "Cancelled"],
+  "Order Received": ["Approved", "Cancelled"],
+  Approved: ["In Kitchen", "Cancelled"],
+  "In Kitchen": ["Ready", "Cancelled"],
+  Ready: ["Sent to Delivery"],
   "Sent to Delivery": ["Delivered"],
   Delivered: [],
   Cancelled: [],
 };
 
 export const getAllOrders = asyncHandler(async (req: Request, res: Response) => {
-  const { status, from, to, page = "1", limit = "20", search } = req.query as Record<string, string>;
+  const { status, from, to, page = "1", limit = "20", search, sort = "newest" } = req.query as Record<string, string>;
 
   const filter: Record<string, unknown> = {};
   if (status && VALID_STATUSES.includes(status as OrderStatus)) filter["orderStatus"] = status;
@@ -40,9 +42,16 @@ export const getAllOrders = asyncHandler(async (req: Request, res: Response) => 
   const limitNum = Math.min(100, Math.max(1, Number(limit)));
   const skip = (pageNum - 1) * limitNum;
 
+const sortMap: Record<string, Record<string, 1 | -1>> = {
+    newest: { createdAt: -1 },
+    oldest: { createdAt: 1 },
+    total_desc: { totalAmount: -1 },
+    total_asc: { totalAmount: 1 },
+  };
+
   const [orders, total] = await Promise.all([
     Order.find(filter)
-      .sort({ createdAt: -1 })
+      .sort(sortMap[sort] ?? { createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .populate("user", "name email"),

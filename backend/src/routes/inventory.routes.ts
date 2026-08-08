@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { listInventory, updateStock, updateThreshold, adjustStock, createIngredient, deleteIngredient } from "../controllers/inventory.controller";
+import { listInventory, updateStock, updateThreshold, adjustStock, createIngredient, updateIngredientDetails, deleteIngredient } from "../controllers/inventory.controller";
 import { authAdmin } from "../middleware/authAdmin";
 import { validate } from "../middleware/validate";
 
@@ -24,6 +24,19 @@ router.post(
 );
 
 router.delete("/:id", deleteIngredient);
+
+// Edit an ingredient's details (name/unit/price/image) without touching stock.
+router.patch(
+  "/:id/details",
+  [
+    body("name").optional().trim().notEmpty().withMessage("name cannot be empty"),
+    body("unit").optional().trim().notEmpty().withMessage("unit cannot be empty"),
+    body("price").optional().isNumeric().withMessage("price must be a number"),
+    body("image").optional().isString().withMessage("image must be a string"),
+  ],
+  validate,
+  updateIngredientDetails,
+);
 
 router.patch(
   "/:id",

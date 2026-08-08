@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { createOrder, initiatePayment, verifyPayment, myOrders, orderStatus, getOrderById } from "../controllers/order.controller";
+import { createOrder, initiatePayment, verifyPayment, cancelOrder, myOrders, orderStatus, getOrderById } from "../controllers/order.controller";
 import { authUser } from "../middleware/authUser";
 import { validate } from "../middleware/validate";
 import { apiLimiter } from "../middleware/rateLimiter";
@@ -31,10 +31,9 @@ router.post(
   createOrder,
 );
 
-router.post("/:id/payment", authUser, initiatePayment);
+router.post("/:id/payment", authUser, initiatePayment);router.post("/:id/cancel", authUser, cancelOrder);
 
-router.post(
-  "/:id/verify-payment",
+router.post("/:id/verify-payment",
   authUser,
   [
     body("razorpayOrderId").notEmpty(),

@@ -30,9 +30,11 @@ export interface Pizza {
   category: 'veg' | 'non-veg';
   tags: string[];
   imageUrl: string;
+  hasImage?: boolean;
   ingredients: string[];
   isAvailable: boolean;
   orderCount: number;
+  createdAt?: string;
 }
 
 export interface InventoryItem {
@@ -43,6 +45,7 @@ export interface InventoryItem {
   maxCapacity: number;
   threshold: number;
   unitPrice: number;
+  unit?: string;
   isAvailable: boolean;
   imageUrl?: string;
 }
@@ -88,7 +91,7 @@ export interface Order {
   tax: number;
   deliveryFee: number;
   total: number;
-  status: 'received' | 'kitchen' | 'delivery' | 'completed' | 'cancelled';
+  status: 'received' | 'approved' | 'kitchen' | 'ready' | 'delivery' | 'completed' | 'cancelled';
   statusHistory: { status: string; timestamp: string; updatedBy: string }[];
   payment: {
     status: 'pending' | 'completed' | 'failed';
@@ -107,7 +110,7 @@ export interface Order {
   userEmail?: string;
 }
 
-export type OrderStatus = 'received' | 'kitchen' | 'delivery' | 'completed' | 'cancelled';
+export type OrderStatus = 'received' | 'approved' | 'kitchen' | 'ready' | 'delivery' | 'completed' | 'cancelled';
 
 export interface DashboardStats {
   totalOrders: number;

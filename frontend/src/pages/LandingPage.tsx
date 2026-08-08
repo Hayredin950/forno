@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { ChevronDown, Pointer, Layers, Flame, Bike } from 'lucide-react';
-import { pizzaApi } from '@/services/api';
+import { pizzaApi, statsApi, type SiteStats } from '@/services/api';
 import type { Pizza } from '@/types';
 
 function CountUp({ target, decimals = 0, suffix = '', duration = 1500 }: { target: number; decimals?: number; suffix?: string; duration?: number }) {
@@ -38,23 +38,24 @@ const steps = [
   { icon: Bike, num: '04', title: 'Deliver', desc: 'Track your order in real time as it speeds to your door.' },
 ];
 
-const stats = [
-  { value: 50000, suffix: '+', label: 'Pizzas Baked' },
-  { value: 4.9, suffix: '', label: 'Star Rating', isDecimal: true },
-  { value: 15, suffix: '', label: 'Minutes Avg. Delivery' },
-  { value: 25, suffix: '+', label: 'Ingredient Choices' },
-];
-
 export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const [scrollIndicatorVisible, setScrollIndicatorVisible] = useState(true);
   const [featuredPizzas, setFeaturedPizzas] = useState<Pizza[]>([]);
+  const [stats, setStats] = useState<SiteStats | null>(null);
 
   // Featured pizzas come from the database (most-ordered, available only) —
   // never hardcoded, so menu changes show up here automatically.
   useEffect(() => {
     pizzaApi.getAll({ sort: 'popular' }).then((res) => {
       if (res.success) setFeaturedPizzas(res.data.pizzas.slice(0, 6));
+    }).catch(() => {});
+  }, []);
+
+  // Real, database-driven stats — never hardcoded.
+  useEffect(() => {
+    statsApi.get().then((res) => {
+      if (res.success) setStats(res.data);
     }).catch(() => {});
   }, []);
 
@@ -229,11 +230,16 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Stats — real database-driven numbers */}
       <section className="py-16 relative noise-overlay">
         <div className="max-w-5xl mx-auto px-6 lg:px-12 relative z-10">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12">
-            {stats.map((stat, i) => (
+            {[
+              { value: stats?.pizzasBaked ?? 0, suffix: '+', label: 'Pizzas Baked', decimals: 0 },
+              { value: stats?.happyCustomers ?? 0, suffix: '+', label: 'Happy Customers', decimals: 0 },
+              { value: stats?.avgDeliveryMinutes ?? 0, suffix: '', label: 'Minutes Avg. Delivery', decimals: stats && stats.avgDeliveryMinutes > 0 ? 1 : 0 },
+              { value: stats?.ingredientChoices ?? 0, suffix: '+', label: 'Ingredient Choices', decimals: 0 },
+            ].map((stat, i) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
@@ -243,7 +249,7 @@ export default function LandingPage() {
                 className="text-center"
               >
                 <div className="text-4xl lg:text-5xl font-semibold mb-2" style={{ background: 'linear-gradient(135deg, #FF6B35, #F7931E)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  {stat.isDecimal ? <CountUp target={stat.value} decimals={1} suffix="" duration={1500} /> : <CountUp target={stat.value} suffix={stat.suffix} />}
+                  <CountUp target={stat.value} decimals={stat.decimals} suffix={stat.suffix} />
                 </div>
                 <p className="text-xs uppercase tracking-[0.08em] text-forno-text-muted">{stat.label}</p>
               </motion.div>

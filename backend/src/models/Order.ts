@@ -21,6 +21,8 @@ export interface DeliveryAddress {
   city: string;
   state: string;
   pincode: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface IStatusEntry {
@@ -39,7 +41,7 @@ export interface IOrder extends Document {
   paymentStatus: "pending" | "paid" | "failed" | "refunded";
   paymentId: string | null;
   razorpayOrderId: string | null;
-  orderStatus: "Order Received" | "In Kitchen" | "Sent to Delivery" | "Delivered" | "Cancelled";
+  orderStatus: "Order Received" | "Approved" | "In Kitchen" | "Ready" | "Sent to Delivery" | "Delivered" | "Cancelled";
   deliveryAddress: DeliveryAddress;
   statusHistory: IStatusEntry[];
   estimatedTime: Date;
@@ -75,6 +77,8 @@ const deliveryAddressSchema = new Schema(
     city: { type: String, default: "" },
     state: { type: String, default: "" },
     pincode: { type: String, default: "" },
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
   },
   { _id: false },
 );
@@ -93,7 +97,7 @@ const orderSchema = new Schema<IOrder>(
     orderStatus: {
       type: String,
       default: "Order Received",
-      enum: ["Order Received", "In Kitchen", "Sent to Delivery", "Delivered", "Cancelled"],
+      enum: ["Order Received", "Approved", "In Kitchen", "Ready", "Sent to Delivery", "Delivered", "Cancelled"],
     },
     deliveryAddress: { type: deliveryAddressSchema, default: () => ({}) },
     statusHistory: {

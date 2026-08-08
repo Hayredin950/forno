@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ShieldCheck, ShieldOff, Trash2, Users } from 'lucide-react';
 import { adminUserApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
@@ -14,44 +14,66 @@ interface AdminUser {
   createdAt: string;
 }
 
+type StatusFilter = 'All' | 'active' | 'banned';
+type ProviderFilter = 'All' | 'email' | 'google';
+type SortKey = 'newest' | 'oldest' | 'name_asc' | 'name_desc';
+
 export default function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('All');
+  const [provider, setProvider] = useState<ProviderFilter>('All');
+  const [sort, setSort] = useState<SortKey>('newest');
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   const toast = useToast();
 
+  const loadUsers = async (p = page) => {
+    setLoading(true);
+    try {
+      const res = await adminUserApi.getAll({ search, page: p, limit: 15, status, provider, sort });
+      setUsers(res.data.users);
+      setTotal(res.data.total);
+      setPages(res.data.pages);
+    } catch (e) {
+      toast((e as Error).message || 'Failed to load users', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const t = setTimeout(() => { setPage(1); loadUsers(); }, 300);
+    const t = setTimeout(() => { setPage(1); loadUsers(1); }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  useEffect(() => { loadUsers(); }, [page]);
+  useEffect(() => { loadUsers(); }, [page, status, provider, sort]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 
-  const loadUsers = async () => {
-    setLoading(true);
-    const res = await adminUserApi.getAll({ search, page, limit: 15 });
-    setUsers(res.data.users);
-    setTotal(res.data.total);
-    setPages(res.data.pages);
-    setLoading(false);
-  };
-
   const handleToggle = async (id: string) => {
-    const res = await adminUserApi.toggleActive(id);
-    toast(res.message);
-    loadUsers();
+    try {
+      const res = await adminUserApi.toggleActive(id);
+      toast(res.message);
+      loadUsers();
+    } catch (e) {
+      toast((e as Error).message || 'Failed to update user', 'error');
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this user? Their orders will remain but the account will be removed.')) return;
-    const res = await adminUserApi.remove(id);
-    toast(res.message);
-    loadUsers();
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await adminUserApi.remove(deleteTarget._id);
+      toast(res.message);
+      setDeleteTarget(null);
+      loadUsers();
+    } catch (e) {
+      toast((e as Error).message || 'Failed to delete user', 'error');
+    }
   };
 
   return (
@@ -62,11 +84,37 @@ export default function AdminUsers() {
           <h2 className="text-xl font-semibold text-forno-text-primary">User Management</h2>
         </div>
         <span className="text-xs text-forno-text-muted">{total} registered user{total === 1 ? '' : 's'}</span>
-        <div className="relative ml-auto">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-forno-text-muted" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or email..."
-            className="pl-9 pr-4 py-2 bg-forno-bg-tertiary border border-forno-border rounded-lg text-sm text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50 w-64" />
+
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <div className="flex gap-2">
+            {(['All', 'active', 'banned'] as StatusFilter[]).map(s => (
+              <button key={s} onClick={() => { setStatus(s); setPage(1); }}
+                className={`px-3 py-1.5 rounded-pill text-xs font-medium transition-all ${
+                  status === s ? 'bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/30' : 'bg-forno-bg-tertiary text-forno-text-secondary border border-forno-border'
+                }`}>
+                {s === 'All' ? 'All statuses' : s === 'active' ? 'Active' : 'Banned'}
+              </button>
+            ))}
+          </div>
+          <select value={provider} onChange={e => { setProvider(e.target.value as ProviderFilter); setPage(1); }}
+            className="px-3 py-2 bg-forno-bg-tertiary border border-forno-border rounded-lg text-sm text-forno-text-secondary focus:outline-none focus:border-[#FF6B35]/50">
+            <option value="All">All sign-ins</option>
+            <option value="email">Email</option>
+            <option value="google">Google</option>
+          </select>
+          <select value={sort} onChange={e => { setSort(e.target.value as SortKey); setPage(1); }}
+            className="px-3 py-2 bg-forno-bg-tertiary border border-forno-border rounded-lg text-sm text-forno-text-secondary focus:outline-none focus:border-[#FF6B35]/50">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name_asc">Name A–Z</option>
+            <option value="name_desc">Name Z–A</option>
+          </select>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-forno-text-muted" />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name or email..."
+              className="pl-9 pr-4 py-2 bg-forno-bg-tertiary border border-forno-border rounded-lg text-sm text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50 w-64" />
+          </div>
         </div>
       </div>
 
@@ -104,7 +152,7 @@ export default function AdminUsers() {
                         className={`p-2 rounded-lg border border-forno-border transition-all ${u.isActive ? 'text-forno-text-muted hover:text-forno-accent-red hover:border-red-500/30' : 'text-forno-status-success hover:border-green-500/30'}`}>
                         {u.isActive ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
                       </button>
-                      <button onClick={() => handleDelete(u._id)} title="Delete user"
+                      <button onClick={() => setDeleteTarget(u)} title="Delete user"
                         className="p-2 rounded-lg border border-forno-border text-forno-text-muted hover:text-red-500 hover:border-red-500/30 transition-all">
                         <Trash2 size={14} />
                       </button>
@@ -128,6 +176,26 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setDeleteTarget(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()} className="glass-card-elevated p-6 w-full max-w-sm text-center">
+              <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={20} className="text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-forno-text-primary mb-2">Delete {deleteTarget.name}?</h3>
+              <p className="text-sm text-forno-text-secondary mb-2">Their orders will remain, but the account will be removed permanently.</p>
+              <p className="text-xs text-forno-text-muted mb-6">{deleteTarget.email}</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 text-sm text-forno-text-secondary border border-forno-border rounded-button hover:text-forno-text-primary transition-all">Cancel</button>
+                <button onClick={handleDelete} className="flex-1 py-2.5 text-sm font-medium bg-red-500 text-white rounded-button hover:bg-red-600 transition-all">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

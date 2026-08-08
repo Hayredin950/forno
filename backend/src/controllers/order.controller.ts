@@ -13,18 +13,52 @@ import { checkStockAvailability, decrementStockForOrder } from "../services/stoc
 import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { CUSTOM_BASE_PRICE, calcTax, calcDeliveryFee, calcTotal, roundMoney } from "../utils/pricing";
+import { roundMoney } from "../utils/pricing";
+import { getPricingConfig, calcTax, calcDeliveryFee } from "../services/pricing.service";
+import { getOrCreateSiteConfig } from "../models/SiteConfig";
 import type { AuthUserRequest } from "../middleware/authUser";
 import type { DeliveryAddress } from "../models/Order";
 
 const normalizeAddress = (raw: unknown): DeliveryAddress => {
   const a = (raw ?? {}) as Record<string, unknown>;
+  const num = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
   return {
     street: String(a.street ?? "").trim(),
     city: String(a.city ?? "").trim(),
     state: String(a.state ?? "").trim(),
     pincode: String(a.pincode ?? "").trim(),
+    lat: num(a.lat),
+    lng: num(a.lng),
   };
+};
+
+/** Great-circle distance in km between two coordinates. */
+const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
+
+/**
+ * Realistic ETA based on the distance between the kitchen (admin-configured
+ * delivery origin) and the customer's chosen location: ~20 min prep time plus
+ * travel at ~25 km/h average city delivery speed. Falls back to 30 minutes
+ * whenever coordinates aren't available on either side.
+ */
+const estimateDeliveryDate = async (dest: DeliveryAddress | undefined): Promise<Date> => {
+  const fallback = new Date(Date.now() + 30 * 60000);
+  const origin = (await getOrCreateSiteConfig()).deliveryOrigin;
+  if (!dest?.lat || !dest?.lng || !origin?.lat || !origin?.lng) return fallback;
+  const km = haversineKm(origin.lat, origin.lng, dest.lat, dest.lng);
+  if (!Number.isFinite(km)) return fallback;
+  const minutes = Math.round(20 + (km / 25) * 60);
+  return new Date(Date.now() + Math.max(20, minutes) * 60000);
 };
 
 /** Resolve and price one order item server-side (never trust client prices). */
@@ -51,7 +85,7 @@ const resolveItem = async (item: IOrderItem): Promise<{ resolved: IOrderItem; na
     const missing = ids.filter((id) => !found.has(id));
     if (missing.length > 0) throw new ApiError(400, `Unknown ingredient(s): ${missing.join(", ")}`);
 
-    let buildPrice = CUSTOM_BASE_PRICE;
+    let buildPrice = (await getPricingConfig()).customBasePrice;
     const names: string[] = [];
     for (const ing of ingredients) {
       if (!ing.isAvailable) throw new ApiError(409, `${ing.name} is out of stock`);
@@ -98,15 +132,17 @@ export const createOrder = asyncHandler(async (req: AuthUserRequest, res: Respon
     subtotal = roundMoney(subtotal + resolved.price);
   }
 
-  const tax = calcTax(subtotal);
-  const deliveryFee = calcDeliveryFee(subtotal);
-  const totalAmount = calcTotal(subtotal);
+  const pricing = await getPricingConfig();
+  const tax = calcTax(subtotal, pricing.taxRate);
+  const deliveryFee = calcDeliveryFee(subtotal, pricing.deliveryFee, pricing.freeDeliveryThreshold);
+  const totalAmount = roundMoney(subtotal + tax + deliveryFee);
 
   const stockCheck = await checkStockAvailability(resolvedItems);
   if (!stockCheck.available) {
     return next(new ApiError(409, stockCheck.shortfall ?? "Insufficient stock"));
   }
 
+  const addr = normalizeAddress(deliveryAddress);
   const order = await Order.create({
     user: userId,
     items: resolvedItems,
@@ -114,9 +150,10 @@ export const createOrder = asyncHandler(async (req: AuthUserRequest, res: Respon
     tax,
     deliveryFee,
     totalAmount,
-    deliveryAddress: normalizeAddress(deliveryAddress),
+    deliveryAddress: addr,
     orderStatus: "Order Received",
     statusHistory: [{ status: "Order Received", timestamp: new Date(), updatedBy: "system" }],
+    estimatedTime: await estimateDeliveryDate(addr),
   });
 
   sendSuccess(res, order, "Order created", 201);
@@ -192,7 +229,7 @@ export const verifyPayment = asyncHandler(async (req: AuthUserRequest, res: Resp
     await decrementStockForOrder(order.items, String(order._id));
     order.orderStatus = "Order Received";
     order.statusUpdatedAt = new Date();
-    order.estimatedTime = new Date(Date.now() + 30 * 60000);
+    order.estimatedTime = await estimateDeliveryDate(order.deliveryAddress);
     await order.save();
 
     // Keep per-pizza popularity counters in sync with real sales.
@@ -212,6 +249,24 @@ export const verifyPayment = asyncHandler(async (req: AuthUserRequest, res: Resp
   }
 
   sendSuccess(res, { orderId: order._id, orderStatus: order.orderStatus }, "Payment verified. Order placed!");
+});
+
+export const cancelOrder = asyncHandler(async (req: AuthUserRequest, res: Response, next: NextFunction) => {
+  const { id } = req.params as { id: string };
+  const order = await Order.findOne({ _id: id, user: req.userId });
+  if (!order) return next(new ApiError(404, "Order not found"));
+  if (order.paymentStatus === "paid") {
+    return next(new ApiError(409, "Paid orders can't be cancelled here — contact support"));
+  }
+  if (order.orderStatus === "Cancelled" || order.orderStatus === "Delivered") {
+    return next(new ApiError(409, `Order is already ${order.orderStatus.toLowerCase()}`));
+  }
+
+  order.orderStatus = "Cancelled";
+  order.statusUpdatedAt = new Date();
+  order.statusHistory.push({ status: "Cancelled", timestamp: new Date(), updatedBy: "customer" });
+  await order.save();
+  sendSuccess(res, { orderId: order._id, orderStatus: order.orderStatus }, "Order cancelled");
 });
 
 export const myOrders = asyncHandler(async (req: AuthUserRequest, res: Response) => {

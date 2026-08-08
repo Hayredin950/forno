@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Minus, Flame } from 'lucide-react';
+import { X, Plus, Minus, Flame, Search } from 'lucide-react';
 import { pizzaApi, cartApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import type { Pizza } from '@/types';
@@ -17,6 +17,8 @@ const filters = ['All', 'Veg', 'Non-Veg', 'Spicy', 'Bestseller'];
 export default function MenuPage() {
   const [pizzas, setPizzas] = useState<Pizza[]>([]);
   const [activeFilter, setActiveFilter] = useState('All');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('popular');
   const [bannerIdx, setBannerIdx] = useState(0);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [previewPizza, setPreviewPizza] = useState<Pizza | null>(null);
@@ -24,18 +26,23 @@ export default function MenuPage() {
   const [previewAdding, setPreviewAdding] = useState(false);
   const toast = useToast();
 
-  useEffect(() => { loadPizzas(); }, [activeFilter]);
+  useEffect(() => {
+    const t = setTimeout(loadPizzas, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter, search, sort]);
   useEffect(() => {
     const interval = setInterval(() => setBannerIdx(i => (i + 1) % banners.length), 5000);
     return () => clearInterval(interval);
   }, []);
 
   const loadPizzas = async () => {
-    const params: any = {};
+    const params: any = { sort };
     if (activeFilter === 'Veg') params.category = 'veg';
     if (activeFilter === 'Non-Veg') params.category = 'non-veg';
     if (activeFilter === 'Spicy') params.tag = 'spicy';
     if (activeFilter === 'Bestseller') params.tag = 'bestseller';
+    if (search.trim()) params.search = search.trim();
     const res = await pizzaApi.getAll(params);
     if (res.success && res.data) {
       setPizzas(res.data.pizzas);
@@ -114,17 +121,30 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-10 overflow-x-auto pb-2">
-        {filters.map(f => (
-          <button key={f} onClick={() => setActiveFilter(f)}
-            className={`px-5 py-2.5 rounded-pill text-sm font-semibold whitespace-nowrap transition-all ${
-              activeFilter === f ? 'bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/30' : 'bg-forno-bg-tertiary text-forno-text-secondary border border-forno-border hover:text-forno-text-primary hover:border-[#FF6B35]/20'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      {/* Filters: category chips + search + sort */}
+      <div className="flex flex-wrap items-center gap-3 mb-10">
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {filters.map(f => (
+            <button key={f} onClick={() => setActiveFilter(f)}
+              className={`px-5 py-2.5 rounded-pill text-sm font-semibold whitespace-nowrap transition-all ${
+                activeFilter === f ? 'bg-[#FF6B35]/15 text-[#FF6B35] border border-[#FF6B35]/30' : 'bg-forno-bg-tertiary text-forno-text-secondary border border-forno-border hover:text-forno-text-primary hover:border-[#FF6B35]/20'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="relative ml-auto min-w-[200px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-forno-text-muted" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pizzas..."
+            className="pl-9 pr-4 py-2.5 w-full bg-forno-bg-tertiary border border-forno-border rounded-pill text-sm text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50" />
+        </div>
+        <select value={sort} onChange={e => setSort(e.target.value)}
+          className="px-4 py-2.5 bg-forno-bg-tertiary border border-forno-border rounded-pill text-sm text-forno-text-secondary focus:outline-none focus:border-[#FF6B35]/50">
+          <option value="popular">Sort: Most popular</option>
+          <option value="price_asc">Sort: Price low → high</option>
+          <option value="price_desc">Sort: Price high → low</option>
+        </select>
       </div>
 
       {/* Pizza Grid - Premium Style like Landing Page */}

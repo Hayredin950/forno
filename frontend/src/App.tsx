@@ -22,6 +22,7 @@ import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import AdminPizzas from '@/pages/admin/AdminPizzas';
 import AdminUsers from '@/pages/admin/AdminUsers';
+import AdminSettings from '@/pages/admin/AdminSettings';
 import VerifyEmailPage from '@/pages/auth/VerifyEmailPage';
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage';
 import PizzaDetailPage from '@/pages/user/PizzaDetailPage';
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="orders" element={<AdminOrders />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* Fallback */}

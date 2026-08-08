@@ -79,8 +79,10 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "100kb" }));
-app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+// Raised from 100kb so admins can upload photos as base64 data URLs; the
+// upload handler still rejects anything over 4MB after decoding.
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Serve the pizza/ingredient images directly from the repo on the API host.
 // This keeps image URLs like /images/... working even if the frontend is on

@@ -5,10 +5,12 @@ import pizzaRouter from "./pizza.routes";
 import orderRouter from "./order.routes";
 import adminRouter from "./admin.routes";
 import inventoryRouter from "./inventory.routes";
+import siteRouter from "./site.routes";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(siteRouter);
 router.use("/auth", authRouter);
 router.use("/pizzas", pizzaRouter);
 router.use("/orders", orderRouter);

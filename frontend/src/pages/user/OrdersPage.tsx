@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ClipboardList } from 'lucide-react';
 import { orderApi } from '@/services/api';
+import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
 import type { Order } from '@/types';
 
 const statusColors: Record<string, string> = {
   received: 'bg-[#F7931E]/15 text-[#F7931E]',
+  approved: 'bg-[#F9A825]/15 text-[#F9A825]',
   kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
+  ready: 'bg-[#FFB300]/15 text-[#FFB300]',
   delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
   completed: 'bg-[#7CB342]/15 text-[#7CB342]',
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',
@@ -60,6 +63,7 @@ export default function OrdersPage() {
         {orders.map((order, i) => (
           <motion.div key={order._id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
             <Link to={`/dashboard/orders/${order._id}`} className="glass-card p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:border-[#FF6B35]/20 transition-all">
+              <OrderItemThumbs items={order.items} size={56} />
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="font-mono text-sm text-forno-text-primary">{order.orderId}</span>

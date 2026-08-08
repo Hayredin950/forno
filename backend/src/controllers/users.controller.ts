@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
-  const { search, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { search, page = "1", limit = "20", status, provider, sort = "newest" } = req.query as Record<string, string>;
 
   const filter: Record<string, unknown> = {};
   if (search) {
@@ -17,6 +17,17 @@ export const listUsers = asyncHandler(async (req: Request, res: Response) => {
       { email: { $regex: rx, $options: "i" } },
     ];
   }
+  if (status === "active") filter["isActive"] = true;
+  if (status === "banned") filter["isActive"] = false;
+  if (provider === "email") filter["googleId"] = null; // { $eq: null } matches missing too
+  if (provider === "google") filter["googleId"] = { $ne: null };
+
+  const sortMap: Record<string, Record<string, 1 | -1>> = {
+    newest: { createdAt: -1 },
+    oldest: { createdAt: 1 },
+    name_asc: { name: 1 },
+    name_desc: { name: -1 },
+  };
 
   const pageNum = Math.max(1, Number(page));
   const limitNum = Math.min(100, Math.max(1, Number(limit)));
@@ -25,7 +36,7 @@ export const listUsers = asyncHandler(async (req: Request, res: Response) => {
   const [users, total] = await Promise.all([
     User.find(filter)
       .select("name email isVerified isActive googleId createdAt")
-      .sort({ createdAt: -1 })
+      .sort(sortMap[sort] ?? { createdAt: -1 })
       .skip(skip)
       .limit(limitNum),
     User.countDocuments(filter),

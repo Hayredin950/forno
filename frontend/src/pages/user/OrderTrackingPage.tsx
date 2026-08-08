@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ClipboardCheck, Flame, Bike, ArrowLeft } from 'lucide-react';
+import { ClipboardCheck, Flame, Bike, ArrowLeft, MapPin } from 'lucide-react';
 import { useToast } from '@/components/shared/Toaster';
-import { orderApi } from '@/services/api';
+import { orderApi, siteConfigApi, type DeliveryOrigin } from '@/services/api';
+import OrderItemThumbs from '@/components/shared/OrderItemThumbs';
 import type { Order } from '@/types';
 
 const STATUS_STEPS: { status: string; label: string; icon: typeof ClipboardCheck; color: string }[] = [
   { status: 'received', label: 'Order Received', icon: ClipboardCheck, color: '#F7931E' },
+  { status: 'approved', label: 'Approved by Kitchen', icon: ClipboardCheck, color: '#F9A825' },
   { status: 'kitchen', label: 'In Kitchen', icon: Flame, color: '#FF6B35' },
+  { status: 'ready', label: 'Ready for Delivery', icon: ClipboardCheck, color: '#FFB300' },
   { status: 'delivery', label: 'Out for Delivery', icon: Bike, color: '#7CB342' },
 ];
 
@@ -19,8 +22,17 @@ export default function OrderTrackingPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [currentStatus, setCurrentStatus] = useState<string>('received');
   const [eta, setEta] = useState(25 * 60);
+  const [kitchen, setKitchen] = useState<DeliveryOrigin | null>(null);
 
   useEffect(() => { loadOrder(); }, [orderId]);
+
+  // Kitchen location is admin-controlled (Admin → Settings → Delivery Origin)
+  // and drives the map that shows where the courier picks up your pizza.
+  useEffect(() => {
+    siteConfigApi.get().then((res) => {
+      if (res.success) setKitchen(res.data.deliveryOrigin);
+    }).catch(() => {});
+  }, []);
 
   // Count down from the server-supplied estimated delivery time if present.
   useEffect(() => {
@@ -99,6 +111,34 @@ export default function OrderTrackingPage() {
         </p>
       </div>
 
+      {/* Your Order — items with images + price breakdown */}
+      <div className="glass-card p-6 mb-6">
+        <h4 className="text-sm font-semibold text-forno-text-primary mb-4">Your Order</h4>
+        <div className="space-y-3">
+          {order.items.map((item, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <OrderItemThumbs items={[item]} size={56} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-forno-text-primary">{item.name}</p>
+                <p className="text-xs text-forno-text-muted">
+                  {item.type === 'custom'
+                    ? `Custom build${item.base ? ` • ${item.base}` : ''}${item.sauce ? ` + ${item.sauce}` : ''}${item.cheese ? ` + ${item.cheese}` : ''}${(item.veggies ?? []).length ? ` + ${item.veggies!.length} topping(s)` : ''}`
+                    : 'Catalogue pizza'}
+                  {' × '}{item.quantity}
+                </p>
+              </div>
+              <span className="font-mono text-sm text-forno-text-primary shrink-0">₹{item.totalPrice.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 pt-4 border-t border-forno-border space-y-1.5 text-sm">
+          <div className="flex justify-between text-forno-text-secondary"><span>Subtotal</span><span className="font-mono">₹{order.subtotal.toFixed(2)}</span></div>
+          <div className="flex justify-between text-forno-text-secondary"><span>Tax</span><span className="font-mono">₹{order.tax.toFixed(2)}</span></div>
+          <div className="flex justify-between text-forno-text-secondary"><span>Delivery fee</span><span className="font-mono">₹{order.deliveryFee.toFixed(2)}</span></div>
+          <div className="flex justify-between text-forno-text-primary font-semibold pt-1.5 border-t border-forno-border"><span>Total</span><span className="font-mono">₹{order.total.toFixed(2)}</span></div>
+        </div>
+      </div>
+
       {/* Timeline */}
       <div className="glass-card p-6 mb-6">
         <div className="relative">
@@ -156,17 +196,23 @@ export default function OrderTrackingPage() {
         <h4 className="text-sm font-semibold text-forno-text-primary mb-4">Live Delivery Tracking</h4>
         <div className="relative h-64 bg-forno-bg-tertiary rounded-lg overflow-hidden">
           {currentStatus === 'delivery' || currentStatus === 'completed' ? (
-            <iframe
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              loading="lazy"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d193595.15830869428!2d-74.11976397304603!3d40.69766374874431!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89c24fa5d33f083b%3A0xc80b8f06e177fe62!2sNew%20York%2C%20NY%2C%20USA!5e0!3m2!1sen!2s!4v1647856673244!5m2!1sen!2s"
-              title="Google Maps"
-              className="absolute inset-0"
-            />
+            kitchen && kitchen.lat !== 0 && kitchen.lng !== 0 ? (
+              <iframe
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                loading="lazy"
+                allowFullScreen
+                referrerPolicy="no-referrer-when-downgrade"
+                src={`https://maps.google.com/maps?q=${kitchen.lat},${kitchen.lng}&z=15&output=embed`}
+                title="Kitchen location map"
+                className="absolute inset-0"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-forno-text-muted px-6">
+                <p className="text-sm text-center">Map unavailable — the kitchen location isn't configured yet.<br />Set it under Admin → Settings → Delivery Origin.</p>
+              </div>
+            )
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-forno-text-muted">
               <div className="text-center">
@@ -176,6 +222,23 @@ export default function OrderTrackingPage() {
             </div>
           )}
         </div>
+        {/* Route summary: kitchen → customer */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div className="flex items-start gap-2 bg-forno-bg-tertiary/60 border border-forno-border rounded-lg px-3 py-2.5">
+            <MapPin size={14} className="text-[#FF6B35] shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-wide text-forno-text-muted">From (kitchen)</p>
+              <p className="text-forno-text-primary truncate">{kitchen?.label || 'Forno Kitchen'}{kitchen?.address ? ` — ${kitchen.address}` : ''}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 bg-forno-bg-tertiary/60 border border-forno-border rounded-lg px-3 py-2.5">
+            <MapPin size={14} className="text-[#7CB342] shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-wide text-forno-text-muted">To (your address)</p>
+              <p className="text-forno-text-primary truncate">{order.deliveryAddress.street}, {order.deliveryAddress.city} — {order.deliveryAddress.pincode}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -184,10 +247,16 @@ export default function OrderTrackingPage() {
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     received: 'bg-[#F7931E]/15 text-[#F7931E]',
+    approved: 'bg-[#F9A825]/15 text-[#F9A825]',
     kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
+    ready: 'bg-[#FFB300]/15 text-[#FFB300]',
     delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
     completed: 'bg-[#7CB342]/15 text-[#7CB342]',
     cancelled: 'bg-[#E53935]/15 text-[#E53935]',
   };
-  return <span className={`px-3 py-1 rounded-pill text-xs font-semibold ${colors[status] || colors.received}`}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>;
+  const label: Record<string, string> = {
+    approved: 'Approved',
+    ready: 'Ready',
+  };
+  return <span className={`px-3 py-1 rounded-pill text-xs font-semibold ${colors[status] || colors.received}`}>{label[status] || status.charAt(0).toUpperCase() + status.slice(1)}</span>;
 }

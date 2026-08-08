@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ArrowLeft, ArrowRight, Shuffle, ShoppingCart } from 'lucide-react';
-import { inventoryApi, cartApi } from '@/services/api';
+import { Check, ArrowLeft, ArrowRight, Shuffle, ShoppingCart, Search, Info } from 'lucide-react';
+import { inventoryApi, cartApi, siteConfigApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 import PizzaPreview from '@/components/shared/PizzaPreview';
 import { ingredientImage } from '@/lib/pizzaLayers';
@@ -21,10 +21,21 @@ export default function BuilderPage() {
   const [selected, setSelected] = useState<{ base: InventoryItem | null; sauce: InventoryItem | null; cheese: InventoryItem | null; veggies: InventoryItem[] }>({ base: null, sauce: null, cheese: null, veggies: [] });
   const [direction, setDirection] = useState(1);
   const [loadingError, setLoadingError] = useState(false);
+  const [ingSearch, setIngSearch] = useState('');
   const navigate = useNavigate();
   const toast = useToast();
+  // Custom-pizza base price is admin-controllable; default ₹200 until loaded.
+  const [customBasePrice, setCustomBasePrice] = useState(200);
+  useEffect(() => {
+    siteConfigApi.get().then((res) => {
+      if (res.success) setCustomBasePrice(res.data.pricing.customBasePrice);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => { loadInventory(); }, []);
+
+  // A search from a previous step shouldn't silently empty the next one.
+  useEffect(() => { setIngSearch(''); }, [step]);
 
   const loadInventory = async () => {
     try {
@@ -37,8 +48,9 @@ export default function BuilderPage() {
   };
 
   const currentItems = useMemo(() => {
-    return items.filter(i => i.category === STEPS[step].key);
-  }, [items, step]);
+    const q = ingSearch.trim().toLowerCase();
+    return items.filter(i => i.category === STEPS[step].key && (!q || i.name.toLowerCase().includes(q)));
+  }, [items, step, ingSearch]);
 
   const currentKey = STEPS[step].key as keyof typeof selected;
   const isMulti = currentKey === 'veggies';
@@ -114,8 +126,8 @@ export default function BuilderPage() {
       veggies: selected.veggies.map(v => v.name),
       veggieIds,
       quantity: 1,
-      unitPrice: totalPrice + 200,
-      totalPrice: totalPrice + 200,
+      unitPrice: totalPrice + customBasePrice,
+      totalPrice: totalPrice + customBasePrice,
     });
     toast('Custom pizza added to cart!');
     navigate('/dashboard/checkout');
@@ -158,7 +170,7 @@ export default function BuilderPage() {
         <div className="flex-1">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div key={step} custom={direction} initial={{ x: direction * 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: direction * -50, opacity: 0 }} transition={{ duration: 0.3 }}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-xl font-semibold text-forno-text-primary">{STEPS[step].label}</h3>
                   <p className="text-sm text-forno-text-secondary">{STEPS[step].instruction}</p>
@@ -166,6 +178,15 @@ export default function BuilderPage() {
                 <button onClick={surpriseMe} className="flex items-center gap-2 px-3 py-2 text-sm text-forno-text-secondary border border-forno-border rounded-button hover:border-[#FF6B35]/30 hover:text-forno-text-primary transition-all">
                   <Shuffle size={14} /> Surprise Me
                 </button>
+              </div>
+
+              {/* Filter the current step's ingredients */}
+              <div className="relative mb-5">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-forno-text-muted" />
+                <input type="text" value={ingSearch} onChange={e => setIngSearch(e.target.value)}
+                  placeholder={`Search ${STEPS[step].label.toLowerCase()}...`}
+                  className="pl-9 pr-8 py-2 w-full bg-forno-bg-tertiary border border-forno-border rounded-lg text-sm text-forno-text-primary placeholder:text-forno-text-muted focus:outline-none focus:border-[#FF6B35]/50" />
+                {ingSearch && <button onClick={() => setIngSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-forno-text-muted hover:text-forno-text-primary">×</button>}
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4">
@@ -176,7 +197,9 @@ export default function BuilderPage() {
                   </div>
                 )}
                 {!loadingError && currentItems.length === 0 && (
-                  <div className="col-span-full text-center py-10 text-forno-text-muted">No ingredients available in this category yet.</div>
+                  <div className="col-span-full text-center py-10 text-forno-text-muted">
+                    {ingSearch.trim() ? `No ${STEPS[step].label.toLowerCase()} match "${ingSearch.trim()}".` : 'No ingredients available in this category yet.'}
+                  </div>
                 )}
                 {currentItems.map(item => {
                   const imageUrl = ingredientImage(item.name);
@@ -260,10 +283,19 @@ export default function BuilderPage() {
                   <span className="text-sm text-forno-text-secondary">Subtotal</span>
                   <motion.span key={totalPrice} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                     className="text-xl font-mono font-semibold text-forno-text-primary">
-                    ₹{totalPrice + 200}
+                    ₹{totalPrice + customBasePrice}
                   </motion.span>
                 </div>
-                <p className="text-xs text-forno-text-muted mt-1">Base price ₹200 + ingredients</p>
+                {/* Base-price explainer: what the admin-controlled base covers */}
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <p className="text-xs text-forno-text-muted">Base price ₹{customBasePrice} + ingredients</p>
+                  <span className="relative group inline-flex">
+                    <Info size={13} className="text-forno-text-muted cursor-help hover:text-[#FF6B35] transition-colors" />
+                    <span className="pointer-events-none absolute bottom-full right-0 mb-2 w-56 p-3 rounded-lg bg-forno-bg-secondary border border-forno-border text-[11px] leading-relaxed text-forno-text-secondary opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg">
+                      The base price covers the hand-tossed dough, sauce, cheese and baking. Every extra ingredient is priced individually on top of it.
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>

@@ -106,6 +106,43 @@ export const createIngredient = asyncHandler(async (req: Request, res: Response,
   sendSuccess(res, ingredient, "Ingredient created", 201);
 });
 
+export const updateIngredientDetails = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { id } = req.params as { id: string };
+  const { name, unit, price, image } = req.body as {
+    name?: string;
+    unit?: string;
+    price?: number;
+    image?: string;
+  };
+
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) {
+    if (!String(name).trim()) return next(new ApiError(400, "name cannot be empty"));
+    updates.name = String(name).trim();
+  }
+  if (unit !== undefined) {
+    if (!String(unit).trim()) return next(new ApiError(400, "unit cannot be empty"));
+    updates.unit = String(unit).trim();
+  }
+  if (price !== undefined) {
+    const p = Number(price);
+    if (!Number.isFinite(p) || p < 0) return next(new ApiError(400, "price must be a non-negative number"));
+    updates.price = p;
+  }
+  if (image !== undefined) updates.image = String(image);
+
+  // Reject renames that collide with an existing ingredient (same guard as create).
+  if (updates.name) {
+    const existing = await Ingredient.findOne({ name: updates.name, _id: { $ne: id } });
+    if (existing) return next(new ApiError(409, "An ingredient with this name already exists"));
+  }
+
+  const ingredient = await Ingredient.findByIdAndUpdate(id, updates, { new: true });
+  if (!ingredient) return next(new ApiError(404, "Ingredient not found"));
+
+  sendSuccess(res, ingredient, "Ingredient updated");
+});
+
 export const deleteIngredient = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   const { id } = req.params as { id: string };
   const ingredient = await Ingredient.findByIdAndDelete(id);

@@ -12,6 +12,12 @@ import {
 import { listUsers, toggleUserActive, deleteUser } from "../controllers/users.controller";
 import { authAdmin } from "../middleware/authAdmin";
 import { validate } from "../middleware/validate";
+import { uploadImage } from "../controllers/upload.controller";
+import {
+  getAdminSettings,
+  updateAdminSettings,
+  listSubscribers,
+} from "../controllers/siteConfig.controller";
 
 const router = Router();
 
@@ -38,5 +44,13 @@ router.get("/analytics/hourly", getHourlyOrders);
 router.get("/users", listUsers);
 router.patch("/users/:id/toggle", toggleUserActive);
 router.delete("/users/:id", deleteUser);
+
+// Site / business settings (social links, contact, delivery origin)
+router.get("/settings", getAdminSettings);
+router.put("/settings", updateAdminSettings);
+router.get("/settings/subscribers", listSubscribers);
+
+// Image upload (base64 data URL → stored under /images/uploads/…)
+router.post("/upload", uploadImage);
 
 export default router;

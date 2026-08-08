@@ -8,11 +8,15 @@ import type { DashboardStats, Order, InventoryItem } from '@/types';
 
 const statusColors: Record<string, string> = {
   received: 'bg-[#F7931E]/15 text-[#F7931E]',
+  approved: 'bg-[#F9A825]/15 text-[#F9A825]',
   kitchen: 'bg-[#FF6B35]/15 text-[#FF6B35]',
+  ready: 'bg-[#FFB300]/15 text-[#FFB300]',
   delivery: 'bg-[#7CB342]/15 text-[#7CB342]',
   completed: 'bg-[#7CB342]/15 text-[#7CB342]',
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',
 };
+const statusLabel: Record<string, string> = { approved: 'Approved', ready: 'Ready' };
+const fmtStatus = (s: string) => statusLabel[s] || s.charAt(0).toUpperCase() + s.slice(1);
 
 function CountUp({ target, duration = 1000 }: { target: number; duration?: number }) {
   const [count, setCount] = useState(0);
@@ -158,7 +162,7 @@ export default function AdminDashboard() {
                   <td className="px-4 py-3.5 text-sm text-forno-text-primary">{order.userName || 'Guest'}</td>
                   <td className="px-4 py-3.5 text-sm text-forno-text-secondary">{order.items.length} items</td>
                   <td className="px-4 py-3.5 font-mono text-sm text-forno-text-primary">₹{order.total.toFixed(0)}</td>
-                  <td className="px-4 py-3.5"><span className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold ${statusColors[order.status]}`}>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span></td>
+                  <td className="px-4 py-3.5"><span className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold ${statusColors[order.status]}`}>{fmtStatus(order.status)}</span></td>
                   <td className="px-4 py-3.5 text-xs text-forno-text-muted">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                 </motion.tr>
               ))}

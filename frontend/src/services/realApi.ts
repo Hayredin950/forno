@@ -42,6 +42,10 @@ const API_ORIGIN = (() => {
 function resolveImageUrl(raw: string | null | undefined): string | undefined {
   if (!raw) return undefined;
   if (/^https?:\/\//.test(raw)) return raw;
+  // MongoDB-stored uploads are served by the API itself → always prefix with
+  // the API base (works same-origin in dev via the Vite proxy and cross-origin
+  // in production, where API_BASE is an absolute URL).
+  if (raw.startsWith('/uploads/')) return `${API_BASE}${raw}`;
   if (API_ORIGIN && raw.startsWith('/images/')) return `${API_ORIGIN}${raw}`;
   return raw;
 }
@@ -89,7 +93,9 @@ async function adminFetch(path: string, options: RequestInit = {}) {
 
 const STATUS_FE_TO_BE: Record<string, string> = {
   received: 'Order Received',
+  approved: 'Approved',
   kitchen: 'In Kitchen',
+  ready: 'Ready',
   delivery: 'Sent to Delivery',
   completed: 'Delivered',
   cancelled: 'Cancelled',
@@ -97,7 +103,9 @@ const STATUS_FE_TO_BE: Record<string, string> = {
 
 const STATUS_BE_TO_FE: Record<string, OrderStatus> = {
   'Order Received': 'received',
+  'Approved': 'approved',
   'In Kitchen': 'kitchen',
+  'Ready': 'ready',
   'Sent to Delivery': 'delivery',
   'Delivered': 'completed',
   'Cancelled': 'cancelled',
@@ -118,6 +126,7 @@ function getPizzaImage(name: string): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapPizza(p: any): Pizza {
+  const rawImage = p.imageUrl ?? p.image;
   return {
     _id: String(p._id),
     name: p.name,
@@ -125,10 +134,12 @@ function mapPizza(p: any): Pizza {
     price: p.price ?? p.basePrice,
     category: p.category,
     tags: p.tags ?? [],
-    imageUrl: resolveImageUrl(p.imageUrl ?? p.image) ?? getPizzaImage(p.name),
+    imageUrl: resolveImageUrl(rawImage) ?? getPizzaImage(p.name),
+    hasImage: !!rawImage,
     ingredients: p.ingredients ?? [],
     isAvailable: p.isAvailable ?? true,
     orderCount: p.orderCount ?? 0,
+    createdAt: p.createdAt ?? '',
   };
 }
 
@@ -149,6 +160,7 @@ function mapIngredient(ing: any): InventoryItem {
     maxCapacity: ing.maxCapacity ?? Math.max(stock, 50),
     threshold: ing.lowStockThreshold ?? 10,
     unitPrice: ing.price ?? 0,
+    unit: ing.unit ?? '',
     isAvailable: ing.isAvailable ?? stock > 0,
     imageUrl: resolveImageUrl(ing.imageUrl ?? ing.image) ?? undefined,
   };
@@ -484,6 +496,19 @@ export const inventoryApi = {
     return { success: true, data: { items } };
   },
 
+  // Public (unauthenticated) ingredient id → name lookup, used by order pages
+  // to render custom-pizza previews. GET /admin/inventory is intentionally
+  // public, so this never needs an admin token.
+  async getNamesById(): Promise<Map<string, string>> {
+    try {
+      const res = await apiFetch('/admin/inventory');
+      const rawItems = Array.isArray(res.data) ? (res.data as unknown[]) : [];
+      return new Map(rawItems.map((i: any) => [String(i._id), i.name]));
+    } catch {
+      return new Map();
+    }
+  },
+
   async update(id: string, data: { currentStock?: number; threshold?: number }): Promise<{ success: boolean; data: { item: InventoryItem } }> {
     let raw: unknown = null;
 
@@ -515,7 +540,19 @@ export const inventoryApi = {
     return { success: true, data: { item: mapIngredient(res.data) } };
   },
 
-  async create(data: { type: string; name: string; unit: string; price?: number; currentStock?: number; maxCapacity?: number; lowStockThreshold?: number }): Promise<{ success: boolean; message?: string }> {
+  async updateDetails(id: string, data: { name?: string; unit?: string; price?: number; image?: string }): Promise<{ success: boolean; message?: string }> {
+    try {
+      const res = await adminFetch(`/admin/inventory/${id}/details`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+      return { success: true, message: res.message ?? 'Ingredient updated' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
+  async create(data: { type: string; name: string; unit: string; price?: number; currentStock?: number; maxCapacity?: number; lowStockThreshold?: number; image?: string }): Promise<{ success: boolean; message?: string }> {
     try {
       const res = await adminFetch('/admin/inventory', {
         method: 'POST',
@@ -543,6 +580,9 @@ interface RazorpayPaymentResult {
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature: string;
+  // true when the backend has no real Razorpay keys and the checkout is
+  // simulated (the UI shows a fake card form instead of the SDK widget).
+  mock?: boolean;
 }
 
 export const razorpayApi = {
@@ -560,6 +600,7 @@ export const razorpayApi = {
           razorpayOrderId: payload.razorpayOrderId,
           razorpayPaymentId: `pay_mock_${Math.random().toString(36).slice(2)}`,
           razorpaySignature: `sig_mock_${Math.random().toString(36).slice(2)}`,
+          mock: true,
         },
       };
     }
@@ -636,6 +677,15 @@ export const orderApi = {
     return { success: true, message: res.message ?? 'Payment verified', data: undefined };
   },
 
+  async cancel(orderId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await authFetch(`/orders/${orderId}/cancel`, { method: 'POST' });
+      return { success: true, message: res.message ?? 'Order cancelled' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+
   async getMyOrders(): Promise<{ success: boolean; data: { orders: Order[] } }> {
     const res = await authFetch('/orders/my-orders');
     const raw = Array.isArray(res.data) ? (res.data as unknown[]) : [];
@@ -668,13 +718,14 @@ export const orderApi = {
 // ─── Admin Orders ──────────────────────────────────────────────────────────
 
 export const adminOrderApi = {
-  async getAll(filters?: { status?: string; page?: number; limit?: number; search?: string }): Promise<{ success: boolean; data: { orders: Order[]; total: number; page: number; totalPages: number } }> {
+  async getAll(filters?: { status?: string; page?: number; limit?: number; search?: string; sort?: string }): Promise<{ success: boolean; data: { orders: Order[]; total: number; page: number; totalPages: number } }> {
     const params = new URLSearchParams();
     if (filters?.status && filters.status !== 'All') {
       params.set('status', STATUS_FE_TO_BE[filters.status] ?? filters.status);
     }
     if (filters?.page) params.set('page', String(filters.page));
     if (filters?.limit) params.set('limit', String(filters.limit));
+    if (filters?.sort && filters.sort !== 'newest') params.set('sort', filters.sort);
 
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await adminFetch(`/admin/orders${query}`);
@@ -793,11 +844,14 @@ export const dashboardApi = {
 // ─── Admin Users ───────────────────────────────────────────────────────────
 
 export const adminUserApi = {
-  async getAll(params: { search?: string; page?: number; limit?: number } = {}): Promise<{ success: boolean; data: { users: { _id: string; name: string; email: string; isVerified: boolean; isActive: boolean; googleId: string | null; createdAt: string }[]; total: number; page: number; pages: number } }> {
+  async getAll(params: { search?: string; page?: number; limit?: number; status?: string; provider?: string; sort?: string } = {}): Promise<{ success: boolean; data: { users: { _id: string; name: string; email: string; isVerified: boolean; isActive: boolean; googleId: string | null; createdAt: string }[]; total: number; page: number; pages: number } }> {
     const q = new URLSearchParams();
     if (params.search) q.set('search', params.search);
     if (params.page) q.set('page', String(params.page));
     if (params.limit) q.set('limit', String(params.limit));
+    if (params.status && params.status !== 'All') q.set('status', params.status);
+    if (params.provider && params.provider !== 'All') q.set('provider', params.provider);
+    if (params.sort && params.sort !== 'newest') q.set('sort', params.sort);
     const res = await adminFetch(`/admin/users${q.toString() ? `?${q}` : ''}`);
     const d = res.data as { users: unknown[]; total: number; page: number; pages: number };
     const users = (d.users ?? []).map((u: any) => ({
@@ -859,3 +913,144 @@ export const passwordApi = {
     }
   },
 };
+
+// ─── Public site config (footer social links, contact) ─────────────────────
+
+export interface SiteSocialLinks {
+  instagram: string;
+  twitter: string;
+  facebook: string;
+}
+export interface DeliveryOrigin {
+  label: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+export interface SiteConfigData {
+  contactPhone: string;
+  supportEmail: string;
+  social: SiteSocialLinks;
+  deliveryOrigin: DeliveryOrigin;
+  pricing: PricingConfig;
+}
+
+export interface PricingConfig {
+  customBasePrice: number;
+  taxRate: number;
+  deliveryFee: number;
+  freeDeliveryThreshold: number;
+}
+
+export const siteConfigApi = {
+  // Shared normalizer (also used by adminSettingsApi)
+  normalize(d: SiteConfigData): SiteConfigData {
+    return {
+      contactPhone: d.contactPhone ?? '',
+      supportEmail: d.supportEmail ?? '',
+      social: {
+        instagram: d.social?.instagram ?? '',
+        twitter: d.social?.twitter ?? '',
+        facebook: d.social?.facebook ?? '',
+      },
+      deliveryOrigin: {
+        label: d.deliveryOrigin?.label ?? 'Forno Kitchen',
+        address: d.deliveryOrigin?.address ?? '',
+        lat: d.deliveryOrigin?.lat ?? 0,
+        lng: d.deliveryOrigin?.lng ?? 0,
+      },
+      pricing: {
+        customBasePrice: d.pricing?.customBasePrice ?? 200,
+        taxRate: d.pricing?.taxRate ?? 0.05,
+        deliveryFee: d.pricing?.deliveryFee ?? 40,
+        freeDeliveryThreshold: d.pricing?.freeDeliveryThreshold ?? 500,
+      },
+    };
+  },
+  async get(): Promise<{ success: boolean; data: SiteConfigData }> {
+    const res = await apiFetch('/config');
+    return { success: true, data: siteConfigApi.normalize(res.data as SiteConfigData) };
+  },
+};
+
+// ─── Real homepage stats ────────────────────────────────────────────────────
+
+export interface SiteStats {
+  pizzasBaked: number;
+  avgDeliveryMinutes: number;
+  ingredientChoices: number;
+  happyCustomers: number;
+}
+
+export const statsApi = {
+  async get(): Promise<{ success: boolean; data: SiteStats }> {
+    const res = await apiFetch('/stats');
+    const d = res.data as Partial<SiteStats>;
+    return {
+      success: true,
+      data: {
+        pizzasBaked: d.pizzasBaked ?? 0,
+        avgDeliveryMinutes: d.avgDeliveryMinutes ?? 0,
+        ingredientChoices: d.ingredientChoices ?? 0,
+        happyCustomers: d.happyCustomers ?? 0,
+      },
+    };
+  },
+};
+
+// ─── Newsletter (free, no cost) ─────────────────────────────────────────────
+
+export const newsletterApi = {
+  async subscribe(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await apiFetch('/newsletter', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      return { success: true, message: res.message ?? 'Subscribed!' };
+    } catch (e) {
+      return { success: false, message: (e as Error).message };
+    }
+  },
+};
+
+// ─── Admin settings ─────────────────────────────────────────────────────────
+
+export const adminSettingsApi = {
+  async get(): Promise<{ success: boolean; data: SiteConfigData }> {
+    const res = await adminFetch('/admin/settings');
+    const d = res.data as SiteConfigData;
+    return { success: true, data: siteConfigApi.normalize(d) };
+  },
+  async save(data: Partial<SiteConfigData>): Promise<{ success: boolean; message: string }> {
+    const res = await adminFetch('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return { success: true, message: res.message ?? 'Settings saved' };
+  },
+  async listSubscribers(): Promise<{ success: boolean; data: { email: string; createdAt: string }[] }> {
+    const res = await adminFetch('/admin/settings/subscribers');
+    const d = res.data as { email: string; createdAt: string }[];
+    return { success: true, data: d ?? [] };
+  },
+};
+
+// ─── Admin image upload ─────────────────────────────────────────────────────
+
+export const adminUploadApi = {
+  /** Persist a base64 data URL (or pass through a plain http(s) URL). */
+  async upload(dataUrl: string): Promise<{ success: boolean; url: string; message?: string }> {
+    try {
+      const res = await adminFetch('/admin/upload', {
+        method: 'POST',
+        body: JSON.stringify({ image: dataUrl }),
+      });
+      const d = res.data as { url?: string };
+      return { success: true, url: d.url ?? '' };
+    } catch (e) {
+      return { success: false, url: '', message: (e as Error).message };
+    }
+  },
+};
+
