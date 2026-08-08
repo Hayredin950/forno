@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Pizza, Users, Settings, Bike, Check, Clock, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Pizza, Users, Settings, Bike, Check, Clock, Trash2, Flame } from 'lucide-react';
 import { authApi, inventoryApi, adminOrderApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 import type { InventoryItem, Order } from '@/types';
@@ -148,9 +148,9 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="hidden lg:flex w-[280px] bg-forno-bg-primary border-r border-forno-border flex-col fixed h-screen">
         <div className="p-5 pb-4 border-b border-forno-border">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Forno" className="h-8 w-8 rounded-lg" />
-            <span className="text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
+          <div className="flex items-center gap-1 text-lg font-semibold tracking-[0.1em] text-forno-text-primary">
+            FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={9} /></span></span>
+            <span className="ml-2 text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
           </div>
         </div>
 

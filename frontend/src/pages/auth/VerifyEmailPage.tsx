@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { MailCheck, MailX } from 'lucide-react';
+import { MailCheck, MailX, Flame } from 'lucide-react';
 import { passwordApi } from '@/services/api';
 
 export default function VerifyEmailPage() {
@@ -31,8 +31,8 @@ export default function VerifyEmailPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
         <div className="glass-card-elevated p-8 lg:p-10 text-center">
           <div className="mb-6">
-            <Link to="/" className="inline-flex items-center gap-1">
-              <img src="/logo.png" alt="Forno" className="h-10 w-10 rounded-lg" />
+            <Link to="/" className="inline-flex items-center gap-1 text-xl font-semibold tracking-[0.1em] text-forno-text-primary" style={{ fontFamily: 'Inter' }}>
+              FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={10} /></span></span>
             </Link>
           </div>
 

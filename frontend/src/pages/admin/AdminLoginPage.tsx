@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Shield } from 'lucide-react';
+import { Eye, EyeOff, Shield, Flame } from 'lucide-react';
 import { authApi } from '@/services/api';
 import { useToast } from '@/components/shared/Toaster';
 
@@ -34,9 +34,9 @@ export default function AdminLoginPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
         <div className="glass-card-elevated p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 mb-1">
-              <img src="/logo.png" alt="Forno" className="h-10 w-10 rounded-lg" />
-              <span className="text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
+            <div className="inline-flex items-center gap-1 text-xl font-semibold tracking-[0.1em] text-forno-text-primary mb-1">
+              FORN<span className="relative">O<span className="absolute -right-1.5 -top-0.5 text-[#FF6B35]"><Flame size={10} /></span></span>
+              <span className="ml-2 text-xs tracking-[0.08em] text-[#FF6B35] font-normal">ADMIN</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-forno-text-muted mt-4">
               <Shield size={16} />
