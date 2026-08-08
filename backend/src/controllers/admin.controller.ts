@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { Order } from "../models/Order";
+import { checkStockAvailability } from "../services/stock.service";
 import { sendSuccess } from "../utils/apiResponse";
 import { ApiError } from "../utils/apiError";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -16,7 +17,9 @@ const CAN_TRANSITION: Record<string, string[]> = {
   "In Kitchen": ["Sent to Delivery", "Cancelled"],
   "Sent to Delivery": ["Delivered"],
   Delivered: [],
-  Cancelled: [],
+  // Cancelled isn't terminal: an admin may have hit it by accident, so allow
+  // reopening the order back to the start of the pipeline.
+  Cancelled: ["Order Received"],
   // Legacy (pre-3-phase-rollback) cleanup paths:
   Approved: ["In Kitchen", "Cancelled"],
   Ready: ["Sent to Delivery"],
@@ -79,6 +82,15 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
     const allowed = CAN_TRANSITION[order.orderStatus] ?? [];
     if (!allowed.includes(orderStatus)) {
       return next(new ApiError(400, `Cannot move order from "${order.orderStatus}" to "${orderStatus}"`));
+    }
+  }
+
+  // Reopening a cancelled order: stock was already committed (or held) for it,
+  // so don't let an unfulfillable order back into the kitchen.
+  if (orderStatus === "Order Received" && order.orderStatus === "Cancelled") {
+    const stockCheck = await checkStockAvailability(order.items);
+    if (!stockCheck.available) {
+      return next(new ApiError(409, `Cannot reopen: ${stockCheck.shortfall ?? "insufficient stock"}`));
     }
   }
 

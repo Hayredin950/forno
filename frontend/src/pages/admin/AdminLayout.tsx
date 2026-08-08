@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users, Settings, Bike } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Flame, Pizza, Users, Settings, Bike, Check } from 'lucide-react';
 import { authApi, inventoryApi, adminOrderApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 import type { InventoryItem, Order } from '@/types';
@@ -53,13 +53,15 @@ export default function AdminLayout() {
     return () => clearInterval(interval);
   }, []);
 
-  // Flatten to alert items with stable keys for seen-tracking.
+  // Seen (read) alerts disappear from the listing; only unread stay visible.
+  const unreadLow = lowStock.filter(item => !seenKeys.has(`low:${item._id}`));
+  const unreadOrders = newOrders.filter(order => !seenKeys.has(`order:${order._id}`));
+  const alertCount = unreadLow.length + unreadOrders.length;
+  // All alert keys (for "Mark all as seen").
   const alerts = [
-    ...lowStock.map(item => ({ key: `low:${item._id}`, title: item.name, sub: `${item.currentStock} left`, to: '/admin/inventory?stock=low' })),
-    ...newOrders.map(order => ({ key: `order:${order._id}`, title: order.orderId, sub: `₹${order.total.toFixed(0)}`, to: '/admin/orders' })),
+    ...lowStock.map(item => ({ key: `low:${item._id}` })),
+    ...newOrders.map(order => ({ key: `order:${order._id}` })),
   ];
-  const unread = alerts.filter(a => !seenKeys.has(a.key));
-  const alertCount = unread.length;
 
   const markSeen = (key: string) => setSeenKeys(prev => new Set(prev).add(key));
   const markAllSeen = () => setSeenKeys(prev => new Set([...prev, ...alerts.map(a => a.key)]));
@@ -140,35 +142,44 @@ export default function AdminLayout() {
                         {alertCount > 0 && <span className="px-2 py-0.5 bg-[#FF6B35]/10 text-[#FF6B35] rounded-pill text-[10px] font-semibold">{alertCount} new</span>}
                       </div>
                       <div className="max-h-[320px] overflow-y-auto">
-                        {lowStock.length > 0 && (
+                        {unreadLow.length > 0 && (
                           <div className="px-4 py-2">
                             <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5">Low stock</p>
-                            {lowStock.map(item => (
-                              <button key={item._id} onClick={() => { markSeen(`low:${item._id}`); setNotifOpen(false); navigate('/admin/inventory?stock=low'); }}
-                                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors ${seenKeys.has(`low:${item._id}`) ? 'opacity-50' : ''}`}>
-                                <span className="text-sm text-forno-text-primary truncate">{item.name}</span>
-                                <span className="font-mono text-xs text-forno-accent-red shrink-0">{item.currentStock} left</span>
-                              </button>
+                            {unreadLow.map(item => (
+                              <div key={item._id} className="group flex items-center gap-1 px-1 py-1 rounded-lg hover:bg-white/[0.03] transition-colors">
+                                <button onClick={() => { markSeen(`low:${item._id}`); setNotifOpen(false); navigate('/admin/inventory?stock=low'); }}
+                                  className="flex-1 flex items-center justify-between gap-2 text-left min-w-0">
+                                  <span className="text-sm text-forno-text-primary truncate">{item.name}</span>
+                                  <span className="font-mono text-xs text-forno-accent-red shrink-0">{item.currentStock} left</span>
+                                </button>
+                                <button onClick={() => markSeen(`low:${item._id}`)} title="Mark as read"
+                                  className="opacity-60 group-hover:opacity-100 p-1 text-forno-text-muted hover:text-[#FF6B35] transition-all shrink-0">
+                                  <Check size={13} />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         )}
-                        {newOrders.length > 0 && (
+                        {unreadOrders.length > 0 && (
                           <div className="px-4 py-2 border-t border-forno-border">
                             <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5">New orders</p>
-                            {newOrders.map(order => (
-                              <button key={order._id} onClick={() => { markSeen(`order:${order._id}`); setNotifOpen(false); navigate('/admin/orders'); }}
-                                className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] text-left transition-colors ${seenKeys.has(`order:${order._id}`) ? 'opacity-50' : ''}`}>
-                                <span className="text-sm font-mono text-forno-text-primary truncate">{order.orderId}</span>
-                                <span className="text-xs text-forno-text-muted shrink-0">₹{order.total.toFixed(0)}</span>
-                              </button>
+                            {unreadOrders.map(order => (
+                              <div key={order._id} className="group flex items-center gap-1 px-1 py-1 rounded-lg hover:bg-white/[0.03] transition-colors">
+                                <button onClick={() => { markSeen(`order:${order._id}`); setNotifOpen(false); navigate('/admin/orders'); }}
+                                  className="flex-1 flex items-center justify-between gap-2 text-left min-w-0">
+                                  <span className="text-sm font-mono text-forno-text-primary truncate">{order.orderId}</span>
+                                  <span className="text-xs text-forno-text-muted shrink-0">₹{order.total.toFixed(0)}</span>
+                                </button>
+                                <button onClick={() => markSeen(`order:${order._id}`)} title="Mark as read"
+                                  className="opacity-60 group-hover:opacity-100 p-1 text-forno-text-muted hover:text-[#FF6B35] transition-all shrink-0">
+                                  <Check size={13} />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         )}
-                        {alerts.length === 0 && (
+                        {alertCount === 0 && (
                           <p className="px-4 py-8 text-center text-sm text-forno-text-muted">All caught up — no alerts 🎉</p>
-                        )}
-                        {alerts.length > 0 && alertCount === 0 && (
-                          <p className="px-4 py-4 text-center text-sm text-forno-text-muted">All marked as seen</p>
                         )}
                       </div>
                       <div className="px-4 py-2.5 border-t border-forno-border flex items-center justify-between gap-2">

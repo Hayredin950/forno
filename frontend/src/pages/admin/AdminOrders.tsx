@@ -16,16 +16,15 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-[#E53935]/15 text-[#E53935]',
 };
 // Mirrors the backend's CAN_TRANSITION state machine: orders can only move
-// forward (plus cancel before dispatch), so admins never see invalid options.
+// forward (plus cancel before dispatch). Cancelled isn't terminal — an admin
+// may have hit it by accident, so it can be reopened back to Received.
 const CAN_TRANSITION: Record<OrderStatus, OrderStatus[]> = {
   received: ['kitchen', 'cancelled'],
   kitchen: ['delivery', 'cancelled'],
   delivery: ['completed'],
   completed: [],
-  cancelled: [],
-};
-
-const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  cancelled: ['received'],
+};  const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -34,12 +33,23 @@ export default function AdminOrders() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('newest');
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  // Fixed-position dropdown anchored to the status button, flipping upward
+  // near the bottom of the page so the last rows' menus are never cut off.
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number; up: boolean } | null>(null);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const toast = useToast();
   const maps = useOrderMaps();
 
   useEffect(() => { loadOrders(); }, [page, statusFilter, search, sort]);
+
+  // The fixed-position menu is viewport-anchored, so any scroll detaches it
+  // from its button — close it the moment the page scrolls.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('scroll', close, true);
+    return () => window.removeEventListener('scroll', close, true);
+  }, [menu]);
 
   const loadOrders = async () => {
     try {
@@ -54,10 +64,24 @@ export default function AdminOrders() {
     }
   };
 
+  // Anchor the status menu to the clicked button, flipping upward when it
+  // would overflow the bottom of the viewport (last rows used to hide it).
+  const openMenu = (e: React.MouseEvent<HTMLButtonElement>, orderId: string) => {
+    if (menu?.id === orderId) { setMenu(null); return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const up = rect.bottom + 180 > window.innerHeight;
+    setMenu({
+      id: orderId,
+      x: Math.max(8, Math.min(rect.left, window.innerWidth - 190)),
+      y: up ? window.innerHeight - rect.top + 8 : rect.bottom + 8,
+      up,
+    });
+  };
+
   const handleStatusUpdate = async (orderId: string, status: OrderStatus) => {
     try {
       await adminOrderApi.updateStatus(orderId, status);
-      setOpenDropdown(null);
+      setMenu(null);
       await loadOrders();
       toast(`Order moved to ${statusLabel(status)}`);
       // Keep the open detail modal fully in sync (status + timeline).
@@ -123,27 +147,11 @@ export default function AdminOrders() {
                     </div>
                   </td>
                   <td className="px-4 py-3.5 font-mono text-sm text-forno-text-primary text-right">₹{order.total.toFixed(0)}</td>
-                  <td className="px-4 py-3.5 relative" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => setOpenDropdown(openDropdown === order._id ? null : order._id)}
+                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                    <button onClick={e => openMenu(e, order._id)}
                       className={`px-2.5 py-1 rounded-pill text-[11px] font-semibold ${statusColors[order.status]} cursor-pointer hover:opacity-80 transition-opacity`}>
                       {statusLabel(order.status)}
                     </button>
-                    {openDropdown === order._id && (
-                      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="absolute top-full left-4 mt-1 z-30 glass-card-elevated py-1 min-w-[150px]">
-                        <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-forno-text-muted">Move to…</p>
-                        {CAN_TRANSITION[order.status].map(s => (
-                          <button key={s} onClick={() => handleStatusUpdate(order._id, s)}
-                            className="w-full text-left px-3 py-1.5 text-xs text-forno-text-secondary hover:text-forno-text-primary hover:bg-white/[0.03] transition-colors">
-                            {statusLabel(s)}
-                          </button>
-                        ))}
-                        {CAN_TRANSITION[order.status].length === 0 && (
-                          <p className="px-3 py-1.5 text-xs text-forno-text-muted">
-                            {order.status === 'completed' ? 'Delivered — no further steps.' : 'Cancelled — order closed.'}
-                          </p>
-                        )}
-                      </motion.div>
-                    )}
                   </td>
                   <td className="px-4 py-3.5 text-xs text-forno-text-muted whitespace-nowrap">{new Date(order.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3.5"><button onClick={() => setDetailOrder(order)} className="text-forno-text-muted hover:text-[#FF6B35]"><MoreHorizontal size={16} /></button></td>
@@ -165,7 +173,33 @@ export default function AdminOrders() {
       </div>
 
       {/* Click outside to close dropdown */}
-      {openDropdown && <div className="fixed inset-0 z-20" onClick={() => setOpenDropdown(null)} />}
+      {menu && <div className="fixed inset-0 z-20" onClick={() => setMenu(null)} />}
+
+      {/* Status menu — fixed-positioned so it's never clipped by the table */}
+      {menu && (() => {
+        const order = orders.find(o => o._id === menu.id);
+        if (!order) return null;
+        const options = CAN_TRANSITION[order.status];
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: menu.up ? -6 : 6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="fixed z-30 glass-card-elevated py-1 min-w-[160px]"
+            style={{ left: menu.x, ...(menu.up ? { bottom: menu.y } : { top: menu.y }) }}
+          >
+            <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-forno-text-muted">Move to…</p>
+            {options.map(s => (
+              <button key={s} onClick={() => handleStatusUpdate(order._id, s)}
+                className="w-full text-left px-3 py-1.5 text-xs text-forno-text-secondary hover:text-forno-text-primary hover:bg-white/[0.03] transition-colors">
+                {statusLabel(s)}
+              </button>
+            ))}
+            {options.length === 0 && (
+              <p className="px-3 py-1.5 text-xs text-forno-text-muted">Delivered — no further steps.</p>
+            )}
+          </motion.div>
+        );
+      })()}
 
       {/* ─── Order detail modal ─── */}
       <AnimatePresence>
