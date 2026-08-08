@@ -31,20 +31,34 @@ export const getStats = asyncHandler(async (_req: Request, res: Response) => {
   ]);
   const pizzasBaked = bakedAgg[0]?.total ?? 0;
 
-  // Average delivery minutes = mean elapsed between createdAt and the time the
-  // order reached "Delivered" (from statusUpdatedAt recorded on delivery).
+  // Average delivery minutes = mean time an order spent on the actual last leg
+  // (from when it entered "Sent to Delivery" until it was marked "Delivered"),
+  // taken from statusHistory. This reflects real delivery time and ignores how
+  // long an order idled in earlier stages (kitchen) — otherwise old/stale test
+  // orders that sat in the pipeline for a day would inflate the stat.
   const delivered = await Order.find({
     paymentStatus: "paid",
     orderStatus: "Delivered",
-  }).select("createdAt statusUpdatedAt");
+  }).select("createdAt statusUpdatedAt statusHistory");
   let avgDeliveryMinutes = 0;
   if (delivered.length > 0) {
-    const totalMs = delivered.reduce((sum, o) => {
+    const totalMin = delivered.reduce((sum, o) => {
+      const history = (o.statusHistory ?? []) as {
+        status: string;
+        timestamp?: Date;
+      }[];
+      const sent = history.find((h) => h.status === "Sent to Delivery");
+      const done = history.find((h) => h.status === "Delivered");
+      const start = sent?.timestamp ? sent.timestamp.getTime() : 0;
+      const end = done?.timestamp ? done.timestamp.getTime() : 0;
+      if (start > 0 && end > start) return sum + (end - start) / 60000;
+      // Fallback for orders placed before statusHistory was populated:
+      // use the order's whole lifetime (placement → delivery).
       const t = o.statusUpdatedAt ? o.statusUpdatedAt.getTime() : 0;
       const c = o.createdAt ? o.createdAt.getTime() : 0;
-      return sum + (t > c ? t - c : 0);
+      return sum + (t > c ? (t - c) / 60000 : 0);
     }, 0);
-    avgDeliveryMinutes = Math.round((totalMs / delivered.length / 60000) * 10) / 10;
+    avgDeliveryMinutes = Math.round((totalMin / delivered.length) * 10) / 10;
   }
 
   // Ingredient choices = number of currently available ingredients.
