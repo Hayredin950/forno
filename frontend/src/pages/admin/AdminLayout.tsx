@@ -1,21 +1,24 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Pizza, Users, Settings, Bike, Check, Clock } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, BarChart3, Bell, LogOut, Pizza, Users, Settings, Bike, Check, Clock, Trash2 } from 'lucide-react';
 import { authApi, inventoryApi, adminOrderApi } from '@/services/api';
 import { useState, useEffect } from 'react';
 import type { InventoryItem, Order } from '@/types';
 
-// Relative "when was this acknowledged" label for the read-alert list.
-const formatReadAt = (iso: string): string => {
+// Bare relative "when" label ("just now", "5m ago", "3h ago", "on Aug 8").
+const timeAgo = (iso: string): string => {
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return 'Read earlier'; // legacy seen alert, no recorded time
+  if (Number.isNaN(t)) return 'earlier'; // defensive: malformed stored timestamp
   const mins = Math.floor(Math.max(0, Date.now() - t) / 60000);
-  if (mins < 1) return 'Read just now';
-  if (mins < 60) return `Read ${mins}m ago`;
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `Read ${hrs}h ago`;
-  return `Read on ${new Date(iso).toLocaleDateString()}`;
+  if (hrs < 24) return `${hrs}h ago`;
+  return `on ${new Date(iso).toLocaleDateString()}`;
 };
+
+// "Read earlier" list label: "Read 5m ago", "Read just now"…
+const formatReadAt = (iso: string): string => `Read ${timeAgo(iso)}`;
 
 const navItems = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
@@ -112,13 +115,24 @@ export default function AdminLayout() {
     });
   };
 
+  // Empty the acknowledged history: wipe the read timestamps. The read list
+  // only shows alerts that carry a recorded read time, so clearing them
+  // empties the section while keeping the alerts acknowledged (no badge
+  // spike, nothing resurfaces as unread).
+  const clearReadHistory = () => setReadAt({});
+
+  // Most recent acknowledgement time across the whole read history — ISO
+  // strings sort chronologically, so the last entry is the latest read.
+  // Shown on the bell's hover tooltip.
+  const lastReadIso = Object.values(readAt).sort().pop() ?? '';
+
   // Acknowledged alerts, most-recently-read first (capped so the dropdown
   // never grows unbounded).
   const readAlerts = [
     ...lowStock.map(item => ({ key: `low:${item._id}`, title: item.name, meta: `${item.currentStock} left` })),
     ...newOrders.map(order => ({ key: `order:${order._id}`, title: order.orderId, meta: `₹${order.total.toFixed(0)}` })),
   ]
-    .filter(a => seenKeys.has(a.key))
+    .filter(a => seenKeys.has(a.key) && readAt[a.key])
     .sort((a, b) => String(readAt[b.key] ?? '').localeCompare(String(readAt[a.key] ?? '')))
     .slice(0, 10);
 
@@ -178,9 +192,21 @@ export default function AdminLayout() {
           <h1 className="text-lg font-semibold text-forno-text-primary" style={{ fontFamily: 'Inter' }}>{pageTitle}</h1>
           <div className="flex items-center gap-4">
             <div className="relative">
-              <button onClick={() => setNotifOpen(o => !o)} title="Notifications" className="relative hover:text-[#FF6B35] transition-colors">
+              <button onClick={() => setNotifOpen(o => !o)} aria-label="Notifications" aria-expanded={notifOpen}
+                className="relative group hover:text-[#FF6B35] transition-colors">
                 <Bell size={18} className="text-forno-text-muted" />
                 {alertCount > 0 && <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-forno-accent-red rounded-full text-[9px] text-white font-semibold flex items-center justify-center">{alertCount}</span>}
+
+                {/* Hover tooltip: unread count + when alerts were last acknowledged.
+                    Lives on the button (not the wrapper) so its `group` can't leak
+                    into the dropdown rows' own group-hover reveals. */}
+                {!notifOpen && (
+                  <div className="pointer-events-none absolute right-0 top-full mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 glass-card-elevated px-3 py-2 text-xs whitespace-nowrap">
+                    <p className="text-forno-text-primary font-medium">Notifications</p>
+                    {alertCount > 0 && <p className="text-forno-text-secondary mt-0.5">{alertCount} unread</p>}
+                    {lastReadIso && <p className="text-forno-text-muted mt-0.5">Last read {timeAgo(lastReadIso)}</p>}
+                  </div>
+                )}
               </button>
 
               {/* Notifications dropdown */}
@@ -233,7 +259,13 @@ export default function AdminLayout() {
                         )}
                         {readAlerts.length > 0 && (
                           <div className="px-4 py-2 border-t border-forno-border">
-                            <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold mb-1.5 flex items-center gap-1"><Clock size={10} /> Read earlier</p>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[10px] uppercase tracking-wide text-forno-text-muted font-semibold flex items-center gap-1"><Clock size={10} /> Read earlier</p>
+                              <button onClick={clearReadHistory} title="Clear read history"
+                                className="flex items-center gap-1 text-[10px] text-forno-text-muted hover:text-forno-accent-red transition-colors">
+                                <Trash2 size={10} /> Clear history
+                              </button>
+                            </div>
                             {readAlerts.map(a => (
                               <div key={a.key} className="flex items-center justify-between gap-2 px-1 py-1 rounded-lg">
                                 <span className="text-sm text-forno-text-muted truncate">
